@@ -405,10 +405,10 @@ function escuro() { return getComputedStyle(document.documentElement).colorSchem
 function iniciaMapa() {
   mapa = L.map('mapa', { preferCanvas: true, zoomControl: true, worldCopyJump: true, minZoom: 2, attributionControl: true })
     .setView([-12, -48], 4);
-  const tiles = escuro() ? 'dark_nolabels' : 'light_nolabels';
-  fundo = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${tiles}/{z}/{x}/{y}{r}.png`, {
-    subdomains: 'abcd', maxZoom: 19,
-    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> © <a href="https://carto.com/" target="_blank" rel="noopener">CARTO</a> · Natural Earth',
+  const tiles = escuro() ? 'World_Dark_Gray_Base' : 'World_Light_Gray_Base';
+  fundo = L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${tiles}/MapServer/tile/{z}/{y}/{x}`, {
+    maxZoom: 16, maxNativeZoom: 16,
+    attribution: 'Mapa base © Esri · Natural Earth',
   }).addTo(mapa);
   mapa.attributionControl.setPrefix(false);
 
