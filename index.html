@@ -68,17 +68,19 @@ button { cursor: pointer; }
 .contador span { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); white-space: nowrap; }
 .contador[aria-pressed="true"] { border-bottom-color: var(--accent); }
 
-.corpo { display: grid; grid-template-rows: minmax(0, 52fr) minmax(0, 48fr); min-height: 0; }
+.corpo { display: grid; grid-template-rows: minmax(0, 52fr) minmax(0, 48fr); grid-template-columns: minmax(0, 1fr); min-height: 0; min-width: 0; }
+#app { min-width: 0; overflow-x: hidden; }
 @media (min-width: 900px) { .corpo { grid-template-rows: none; grid-template-columns: minmax(0,1fr) 420px; } }
 #mapa { min-height: 0; background: var(--map-bg); position: relative; }
-.painel { min-height: 0; display: flex; flex-direction: column; background: var(--surface); border-top: 1px solid var(--line); }
+.painel { min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--surface); border-top: 1px solid var(--line); }
 @media (min-width: 900px) { .painel { border-top: 0; border-left: 1px solid var(--line); } }
 
 .painel-topo { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
 .painel-topo h2 { font: 700 1rem var(--f-display); margin: 0; flex: 1; min-width: 0; }
 .painel-topo input { width: 46%; max-width: 200px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-size: .9rem; }
-.cab-rotulos { display: flex; gap: 6px; padding: 6px 12px; justify-content: flex-end; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--surface-2); }
-.cab-rotulos span { width: 30px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cab-rotulos { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 12px; justify-content: flex-start; min-width: 0; font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.cab-rotulos span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cab-rotulos i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--c); flex: none; }
 .lista { overflow-y: auto; flex: 1; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
 .item .tipo { width: 30px; height: 30px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--surface-2); color: var(--primary); border: 1px solid var(--line); }
@@ -507,7 +509,7 @@ function linhaLugar(l) {
 }
 function renderLista() {
   const f = norm(S.filtro), aba = S.aba;
-  $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? '<span style="width:auto">Lugares</span>' : S.rotulos.map(r => `<span title="${esc(r.nome)}">${esc(r.nome)}</span>`).join('');
+  $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? '<span style="width:auto">Lugares</span>' : S.rotulos.map(r => `<span><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</span>`).join('');
   const titulos = { paises: 'Países', estados: 'Estados e províncias', transporte: 'Aeroportos e portos' };
   $('#painel-titulo').textContent = titulos[aba] || TIPOS[aba].nome;
   let html = '';
