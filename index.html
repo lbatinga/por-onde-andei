@@ -432,15 +432,26 @@ const fundoCat = cat => cat === 'misto' ? 'linear-gradient(135deg,#2563eb 50%,#1
 let basePromessa = {};
 function carregaBase(tipo) {
   if (tipo === 'unesco') return basePromessa.unesco ||= todos(() => supa.from('viagem_unesco').select('whs,nome,lat,lon,paises,categoria').order('whs'))
-    .then(rows => (S.baseUnesco = rows.map(r => ({ ref: 'unesco:' + r.whs, tipo: 'unesco', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.paises?.[0] || null, cat: r.categoria || 'cultural', sub: [CATEGORIAS[r.categoria || 'cultural'].nome, (r.paises || []).map(nomePais).join(', ')].filter(Boolean).join(' · ') }))))
+    .then(rows => (S.baseUnesco = semDuplicados(rows.map(r => ({ ref: 'unesco:' + r.whs, tipo: 'unesco', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.paises?.[0] || null, cat: r.categoria || 'cultural', sub: [CATEGORIAS[r.categoria || 'cultural'].nome, (r.paises || []).map(nomePais).join(', ')].filter(Boolean).join(' · ') })))))
     .catch(e => { basePromessa.unesco = null; throw e; });
   if (tipo === 'atracao') return basePromessa.atr ||= todos(() => supa.from('viagem_atracoes').select('qid,tipo,nome,lat,lon,pais,relevancia').order('relevancia', { ascending: false }))
-    .then(rows => (S.baseAtr = rows.map(r => ({ ref: (r.tipo === 'parque' ? 'parque:' : 'wd:') + r.qid, tipo: 'atracao', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.pais, grande: r.relevancia >= 60 ? 1 : 0, rel: r.relevancia, sub: [r.tipo === 'parque' ? 'Parque nacional' : 'Atração', nomePais(r.pais)].filter(Boolean).join(' · ') }))))
+    .then(rows => (S.baseAtr = semDuplicados(rows.map(r => ({ ref: (r.tipo === 'parque' ? 'parque:' : 'wd:') + r.qid, tipo: 'atracao', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.pais, grande: r.relevancia >= 60 ? 1 : 0, rel: r.relevancia, sub: [r.tipo === 'parque' ? 'Parque nacional' : 'Atração', nomePais(r.pais)].filter(Boolean).join(' · ') })))))
     .catch(e => { basePromessa.atr = null; throw e; });
   if (tipo === 'aeroporto') return basePromessa.aero ||= fetch('aeroportos.json').then(r => r.json())
     .then(rows => (S.baseAero = rows.map(([iata, nome, lat, lon, cc, cidade, grande]) => ({ ref: 'iata:' + iata, tipo: 'aeroporto', nome, lat, lon, pais: cc, iata, grande, sub: `${iata} · ${[cidade, nomePais(cc)].filter(Boolean).join(', ')}` }))))
     .catch(e => { basePromessa.aero = null; throw e; });
   return Promise.resolve([]);
+}
+// A Wikidata às vezes tem dois itens para o mesmo lugar: junta mesmo nome a menos de 30 km
+function semDuplicados(lista) {
+  const vistos = new Map(), out = [];
+  for (const b of lista) {
+    const k = norm(b.nome) + '|' + (ehParque(b) ? 'p' : b.tipo);
+    const grupo = vistos.get(k) || [];
+    if (grupo.some(o => distKm(o.lat, o.lon, b.lat, b.lon) < 30)) continue;
+    grupo.push(b); vistos.set(k, grupo); out.push(b);
+  }
+  return out;
 }
 const basePorAba = aba => aba === 'unesco' ? (S.baseUnesco || []) : aba === 'transporte' ? (S.baseAero || []) : aba === 'atracao' ? (S.baseAtr || []) : [];
 const lugarDaRef = ref => S.lugares.find(l => l.ref_externa === ref);
