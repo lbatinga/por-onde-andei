@@ -103,6 +103,8 @@ button { cursor: pointer; }
 .marca[aria-pressed="true"] svg { opacity: 1; }
 .vazio-lista { padding: 28px 20px; color: var(--muted); text-align: center; }
 .vazio-lista b { display: block; color: var(--ink); font: 700 1.05rem var(--f-display); margin-bottom: 4px; }
+.no-mapa { padding: 8px 12px; font-size: .82rem; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.no-mapa button { border: 0; background: none; color: var(--accent); font-weight: 700; padding: 0; white-space: nowrap; }
 .grupo { padding: 10px 12px 4px; font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; display: flex; justify-content: space-between; }
 .bandeira { font-size: 1.2rem; width: 30px; text-align: center; flex: none; }
 
@@ -531,8 +533,17 @@ function linhaLugar(l) {
     <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc(local || TIPOS[l.tipo].um)}</small></button>
     <div class="marcas">${marcas}</div></div>`;
 }
+// A lista mostra só o que está visível no mapa (como no Places Been)
+function noMapa() {
+  if (!mapa) return () => true;
+  const b = mapa.getBounds().pad(0.02);
+  return l => b.contains([l.lat, l.lon]) || b.contains([l.lat, l.lon + 360]) || b.contains([l.lat, l.lon - 360]);
+}
+function avisoMapa(n, total) {
+  return n < total ? `<div class="no-mapa">Mostrando ${n} de ${total} · só o que aparece no mapa <button data-ver-todos>Ver todos</button></div>` : '';
+}
 function renderLista() {
-  const f = norm(S.filtro), aba = S.aba;
+  const f = norm(S.filtro), aba = S.aba, visivel = noMapa();
   $('#cab-rotulos').hidden = aba === 'paises' || aba === 'estados';
   $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? '' : S.rotulos.map(r => `<span><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</span>`).join('');
   const titulos = { paises: 'Países', estados: 'Estados e províncias', transporte: 'Aeroportos e portos' };
@@ -540,8 +551,10 @@ function renderLista() {
   let html = '';
   if (aba === 'paises' || aba === 'estados') {
     const vis = idsVisita(), cont = new Map(), det = new Map();
+    let totalK = new Set();
     for (const l of S.lugares) {
       const k = aba === 'paises' ? l.pais : l.estado; if (!k || !visitado(l.id, vis)) continue;
+      totalK.add(k); if (!visivel(l)) continue;
       cont.set(k, (cont.get(k) || 0) + 1);
       if (!det.has(k)) det.set(k, {}); const d = det.get(k); d[l.tipo] = (d[l.tipo] || 0) + 1;
     }
@@ -568,12 +581,15 @@ function renderLista() {
         html += `<div class="item"><span class="tipo">${ICONES.outro}</span><button class="txt" data-zoom-estado="${esc(id)}"><b>${esc(nomeEstado(id))}</b><small>${esc(resumo(id))}</small></button></div>`;
       }
     }
+    if (html) html = avisoMapa(cont.size, totalK.size) + html;
+    else if (totalK.size) html = avisoMapa(0, totalK.size) + '<div class="vazio-lista"><b>Nada nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     if (!html) html = `<div class="vazio-lista"><b>Nenhum ${aba === 'paises' ? 'país' : 'estado'} ainda</b>Marque lugares como “${esc(S.rotulos.find(r => r.conta_como_visita)?.nome || 'Estive')}” e eles aparecem aqui.</div>`;
   } else {
     const tipos = aba === 'transporte' ? ['aeroporto', 'porto'] : [aba];
-    const ls = S.lugares.filter(l => tipos.includes(l.tipo) && (!f || norm(l.nome + ' ' + nomeEstado(l.estado) + ' ' + nomePais(l.pais)).includes(f)))
-      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-    html = ls.map(linhaLugar).join('');
+    const todos = S.lugares.filter(l => tipos.includes(l.tipo) && (!f || norm(l.nome + ' ' + nomeEstado(l.estado) + ' ' + nomePais(l.pais)).includes(f)));
+    const ls = todos.filter(visivel).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    html = avisoMapa(ls.length, todos.length) + ls.map(linhaLugar).join('');
+    if (!ls.length && todos.length) html += '<div class="vazio-lista"><b>Nada nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     if (!html) html = f ? `<div class="vazio-lista"><b>Nada encontrado</b>Nenhum item com “${esc(S.filtro)}”.</div>`
       : `<div class="vazio-lista"><b>Nenhum item aqui ainda</b>Use a busca lá em cima, toque em “+ Lugar” ou segure o dedo no mapa para adicionar. Se tem dados do Places Been, use Menu › Importar.</div>`;
   }
@@ -1080,7 +1096,12 @@ async function entrar(user) {
   const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1));
 
   $('#contadores').addEventListener('click', e => { const b = e.target.closest('.contador'); if (!b) return; S.aba = b.dataset.aba; S.filtro = ''; $('#filtro').value = ''; atualizaTudo(); });
+  let tLista; mapa.on('moveend', () => { clearTimeout(tLista); tLista = setTimeout(renderLista, 120); });
   $('#lista').addEventListener('click', e => {
+    if (e.target.closest('[data-ver-todos]')) {
+      const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); else mapa.setView([0, 0], 2);
+      return;
+    }
     const mk = e.target.closest('.marca'); if (mk) return alternaRotulo(mk.dataset.l, mk.dataset.r);
     const ab = e.target.closest('[data-abrir]'); if (ab) return abreLugar(ab.dataset.abrir);
     const zp = e.target.closest('[data-zoom-pais]'); if (zp) { const p = S.paisPorId.get(zp.dataset.zoomPais); if (p) mapa.fitBounds([[p.maior[1], p.maior[0]], [p.maior[3], p.maior[2]]]); return; }
