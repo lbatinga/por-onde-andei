@@ -1456,8 +1456,10 @@ function sugereEnquantoDigita(q) {
     const ms = buscaMunicipios(q);
     box.hidden = false;
     box.innerHTML = linhasPaises(q) + (ms.length ? `<div class="grupo-busca">Municípios do Brasil</div>${ms.map(linhaMunicipio).join('')}` : '')
-      + `<button data-mundo="1" class="mundo"><b>Buscar “${esc(q.trim())}” no mundo</b><small>Cidades de fora, aeroportos, portos, atrações</small></button>`;
+      + `<button data-mundo="1" class="mundo"><b>Buscando “${esc(q.trim())}” no mundo…</b><small>Cidades de fora, aeroportos, portos, atrações</small></button>`;
     ligaResultados(box, []);
+    // procura no mundo sozinho quando a pessoa para de digitar (sem precisar tocar no botão)
+    if (q.trim().length >= 3) digitaTimer = setTimeout(() => { if ($('#busca').value.trim() === q.trim()) buscar(q.trim()); }, 800);
   }, 120);
 }
 let buscaSeq = 0;
