@@ -299,6 +299,10 @@ button { cursor: pointer; }
 .rot-edit input[type=color] { width: 40px; height: 36px; padding: 0; border: 0; background: none; }
 .rot-edit input[type=text] { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 8px 10px; min-width: 0; width: 100%; }
 .rot-edit .conta { grid-column: 2 / 4; font-size: .85rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.rot-edit select.conta { grid-column: 1 / -1; width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); color: var(--ink); font: inherit; font-size: .85rem; }
+.trecho { display: flex; align-items: center; gap: 8px; padding: 2px 0 2px 34px; font-size: .8rem; color: var(--muted); list-style: none; }
+.trecho span { white-space: nowrap; }
+.trecho select { width: auto; flex: 0 0 auto; padding: 3px 6px; border: 1px dashed var(--line); border-radius: 99px; background: transparent; color: var(--ink); font: inherit; font-size: .8rem; }
 .resumo-import { background: var(--surface-2); border-radius: 8px; padding: 12px; font-size: .9rem; display: grid; gap: 4px; }
 .resumo-import ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); max-height: 180px; overflow: auto; }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; background: var(--ink); color: var(--bg);
@@ -414,6 +418,7 @@ const ROTULOS_PADRAO = [
   { nome: 'Estive', cor: '#3b82f6', ordem: 1, conta_como_visita: true },
   { nome: 'Quero ir', cor: '#e0a526', ordem: 2, conta_como_visita: false },
   { nome: 'Favorito', cor: '#e11d48', ordem: 3, conta_como_visita: false },
+  { nome: 'Escala', cor: '#64748b', ordem: 4, conta_como_visita: false, so_lugar: true },
 ];
 
 /* ================= Estado ================= */
@@ -588,13 +593,16 @@ async function carregaDados() {
   const lr = await todos(() => supa.from('viagem_lugar_rotulos').select('lugar_id,rotulo_id,data'));
   S.visitas = await todos(() => supa.from('viagem_visitas').select('id,lugar_id,data,precisao,nota,viagem_id').order('data', { ascending: false })).catch(() => []);
   S.viagens = await todos(() => supa.from('viagem_viagens').select('*')).catch(() => []);
-  S.paradas = await todos(() => supa.from('viagem_paradas').select('id,viagem_id,lugar_id,ordem')).catch(() => []);
+  S.paradas = await todos(() => supa.from('viagem_paradas').select('id,viagem_id,lugar_id,ordem,transporte')).catch(() => []);
   S.lr = new Map();
   for (const x of lr) { if (!S.lr.has(x.lugar_id)) S.lr.set(x.lugar_id, new Map()); S.lr.get(x.lugar_id).set(x.rotulo_id, x.data); }
   salvaCopia();
 }
 const rotulosDe = id => S.lr.get(id) || new Map();
 const idsVisita = () => new Set(S.rotulos.filter(r => r.conta_como_visita).map(r => r.id));
+// rótulos como "Escala": contam o lugar (aeroporto entra na contagem), mas não pintam país nem estado
+const idsSoLugar = () => new Set(S.rotulos.filter(r => r.so_lugar && !r.conta_como_visita).map(r => r.id));
+function soLugar(lugarId, so = idsSoLugar()) { for (const r of rotulosDe(lugarId).keys()) if (so.has(r)) return true; return false; }
 function visitado(lugarId, vis = idsVisita()) { for (const r of rotulosDe(lugarId).keys()) if (vis.has(r)) return true; return false; }
 function corDoLugar(lugarId) {
   const m = rotulosDe(lugarId);
@@ -851,7 +859,7 @@ function desenhaPinos() {
 
 /* ================= Estatísticas e lista ================= */
 function calcula() {
-  const vis = idsVisita();
+  const vis = idsVisita(), so = idsSoLugar();
   paisesVis = new Set(); paisesQuero = new Set(); estadosVis = new Set(); estadosQuero = new Set();
   const cont = { cidade: 0, unesco: 0, aeroporto: 0, porto: 0, atracao: 0, outro: 0 };
   for (const l of S.lugares) {
@@ -859,6 +867,8 @@ function calcula() {
     if (visitado(l.id, vis)) {
       cont[l.tipo]++;
       if (l.pais) paisesVis.add(l.pais); if (l.estado) estadosVis.add(l.estado);
+    } else if (soLugar(l.id, so)) {
+      cont[l.tipo]++;
     } else {
       if (l.pais) paisesQuero.add(l.pais); if (l.estado) estadosQuero.add(l.estado);
     }
@@ -1296,7 +1306,11 @@ function abreRotulos() {
         <input type="color" value="${esc(r.cor)}" aria-label="Cor de ${esc(r.nome)}">
         <input type="text" value="${esc(r.nome)}" aria-label="Nome do rótulo">
         <button class="btn perigo" type="button" style="margin:0;padding:8px 10px">Excluir</button>
-        <label class="conta"><input type="checkbox" ${r.conta_como_visita ? 'checked' : ''}> Conta como visitado (pinta país e estado)</label>
+        <select class="conta" aria-label="Como ${esc(r.nome)} conta">
+          <option value="visita" ${r.conta_como_visita ? 'selected' : ''}>Conta como visitado (pinta país e estado)</option>
+          <option value="lugar" ${!r.conta_como_visita && r.so_lugar ? 'selected' : ''}>Conta só o lugar (escala: não pinta país nem estado)</option>
+          <option value="nao" ${!r.conta_como_visita && !r.so_lugar ? 'selected' : ''}>Não conta (lista de desejos)</option>
+        </select>
       </div>`).join('');
     m.querySelectorAll('.rot-edit').forEach(div => {
       const r = S.rotulos.find(x => x.id === div.dataset.id);
@@ -1307,7 +1321,7 @@ function abreRotulos() {
       };
       div.querySelector('input[type=color]').onchange = e => salvar({ cor: e.target.value });
       div.querySelector('input[type=text]').onchange = e => { const n = e.target.value.trim(); if (n) salvar({ nome: n }); else e.target.value = r.nome; };
-      div.querySelector('input[type=checkbox]').onchange = e => salvar({ conta_como_visita: e.target.checked });
+      div.querySelector('select.conta').onchange = e => salvar({ conta_como_visita: e.target.value === 'visita', so_lugar: e.target.value === 'lugar' });
       botaoDuploToque(div.querySelector('.perigo'), async () => {
         const { error } = await supa.from('viagem_rotulos').delete().eq('id', r.id);
         if (error) return toast('Erro: ' + error.message);
@@ -1605,6 +1619,20 @@ function kmViagem(id) {
   return Math.round(km);
 }
 const fmtKm = km => `${km.toLocaleString('pt-BR')} km`;
+// meio de transporte de cada trecho (fica na parada de chegada)
+const TRANSPORTES = { aviao: ['✈️', 'Avião'], onibus: ['🚌', 'Ônibus'], carro: ['🚗', 'Carro'], barco: ['⛴️', 'Barco'], trem: ['🚆', 'Trem'], outro: ['•', 'Outro'] };
+function kmPorTransporte(ids) { // ids: viagens (todas se omitido)
+  const porLugar = new Map(S.lugares.map(l => [l.id, l])), tot = new Map();
+  for (const vg of S.viagens || []) {
+    if (ids && !ids.includes(vg.id)) continue;
+    const ps = paradasDe(vg.id).filter(p => porLugar.has(p.lugar_id));
+    for (let i = 1; i < ps.length; i++) { const a = porLugar.get(ps[i - 1].lugar_id), b = porLugar.get(ps[i].lugar_id), k = ps[i].transporte || 'sem'; tot.set(k, (tot.get(k) || 0) + distKm(a.lat, a.lon, b.lat, b.lon)); }
+  }
+  return tot;
+}
+const resumoTransportes = tot => [...tot].filter(([k]) => k !== 'sem').sort((a, b) => b[1] - a[1]).map(([k, km]) => `${TRANSPORTES[k][0]} ${fmtKm(Math.round(km))}`).join(' · ');
+// palpite inicial: aeroporto→aeroporto é avião; porto→porto é barco
+function palpiteTransporte(a, b) { if (a.tipo === 'aeroporto' && b.tipo === 'aeroporto') return 'aviao'; if (a.tipo === 'porto' && b.tipo === 'porto') return 'barco'; return null; }
 const paradasDe = id => (S.paradas || []).filter(p => p.viagem_id === id).sort((a, b) => a.ordem - b.ordem);
 function periodoViagem(vg) {
   const ds = (S.visitas || []).filter(v => v.viagem_id === vg.id).map(v => v.data).concat(vg.inicio ? [vg.inicio] : []).sort();
@@ -1624,7 +1652,7 @@ function abreViagens() {
     const sug = sugestoesViagem();
     const vgs = [...(S.viagens || [])].sort((a, b) => inicioViagem(b).localeCompare(inicioViagem(a)));
     m.querySelector('#vg-corpo').innerHTML = `
-      ${vgs.length ? vgs.map(vg => { const ps = paradasDe(vg.id); const paises = new Set(ps.map(p => porLugar.get(p.lugar_id)?.pais).filter(Boolean)); return `<button class="viagem-card" data-vg="${vg.id}"><b>${esc(vg.nome)}</b><small>${esc(periodoViagem(vg))} · ${ps.length} ${ps.length === 1 ? 'parada' : 'paradas'} · ${fmtKm(kmViagem(vg.id))} · ${[...paises].map(bandeira).join(' ')}</small></button>`; }).join('') : '<p>Nenhuma viagem ainda. Crie uma a partir das sugestões abaixo ou do zero.</p>'}
+      ${vgs.length ? vgs.map(vg => { const ps = paradasDe(vg.id); const paises = new Set(ps.map(p => porLugar.get(p.lugar_id)?.pais).filter(Boolean)); return `<button class="viagem-card" data-vg="${vg.id}"><b>${esc(vg.nome)}</b><small>${esc(periodoViagem(vg))} · ${ps.length} ${ps.length === 1 ? 'parada' : 'paradas'} · ${fmtKm(kmViagem(vg.id))}${(() => { const t = [...kmPorTransporte([vg.id]).keys()].filter(k => k !== 'sem'); return t.length ? ' ' + t.map(k => TRANSPORTES[k][0]).join('') : ''; })()} · ${[...paises].map(bandeira).join(' ')}</small></button>`; }).join('') : '<p>Nenhuma viagem ainda. Crie uma a partir das sugestões abaixo ou do zero.</p>'}
       ${sug.length ? `<h4>Sugestões</h4><p class="meta">Meses com vários lugares visitados que ainda não estão numa viagem.</p>${sug.map(([ym, vs]) => `<div class="sugestao"><span><b>${esc(nomeMes(ym))}</b> · ${vs.length} lugares<small>${esc(vs.slice(0, 5).map(v => porLugar.get(v.lugar_id)?.nome).filter(Boolean).join(', '))}${vs.length > 5 ? '…' : ''}</small></span><button class="btn" data-sug="${ym}">Criar</button></div>`).join('')}` : ''}`;
     m.querySelectorAll('[data-vg]').forEach(b => b.onclick = () => editaViagem(S.viagens.find(x => x.id === b.dataset.vg), null, () => desenhar(m)));
     m.querySelectorAll('[data-sug]').forEach(b => b.onclick = () => editaViagem(null, b.dataset.sug, () => desenhar(m)));
@@ -1639,10 +1667,10 @@ function abreViagens() {
 function editaViagem(vg, mesSugerido, aoSalvar) {
   const porLugar = new Map(S.lugares.map(l => [l.id, l]));
   // roteiro: lista ordenada de ids de lugar (pode repetir)
-  let roteiro = vg ? paradasDe(vg.id).map(p => p.lugar_id)
-    : mesSugerido ? (S.visitas || []).filter(v => !v.viagem_id && v.precisao !== 'ano' && v.data.startsWith(mesSugerido)).sort((a, b) => a.data.localeCompare(b.data) || porLugar.get(a.lugar_id).nome.localeCompare(porLugar.get(b.lugar_id).nome, 'pt-BR')).map(v => v.lugar_id)
+  let roteiro = vg ? paradasDe(vg.id).map(p => ({ id: p.lugar_id, tr: p.transporte || null }))
+    : mesSugerido ? (S.visitas || []).filter(v => !v.viagem_id && v.precisao !== 'ano' && v.data.startsWith(mesSugerido)).sort((a, b) => a.data.localeCompare(b.data) || porLugar.get(a.lugar_id).nome.localeCompare(porLugar.get(b.lugar_id).nome, 'pt-BR')).map(v => ({ id: v.lugar_id, tr: null }))
     : [];
-  roteiro = roteiro.filter(id => porLugar.has(id));
+  roteiro = roteiro.filter(p => porLugar.has(p.id));
   const mesInicial = (vg?.inicio || inicioViagem(vg || {}) || (mesSugerido ? mesSugerido + '-01' : '')).slice(0, 7);
   const nomePadrao = vg ? vg.nome : mesSugerido ? `Viagem de ${MESES_LONGOS[+mesSugerido.slice(5, 7) - 1]} de ${mesSugerido.slice(0, 4)}` : '';
   abreModal(`
@@ -1663,12 +1691,17 @@ function editaViagem(vg, mesSugerido, aoSalvar) {
     <div class="acoes">${vg ? '<button class="btn perigo" id="vg-excluir" style="margin-right:auto">Excluir</button>' : ''}<button class="btn" id="vg-cancelar">Cancelar</button><button class="btn principal" id="vg-salvar">Salvar</button></div>`, (m, fechar) => {
     const lista = m.querySelector('#vg-roteiro');
     const desenharRoteiro = () => {
-      lista.innerHTML = roteiro.length ? roteiro.map((id, i) => { const l = porLugar.get(id); return `<li class="parada"><span class="num">${i + 1}</span><span class="tipo">${iconeDe(l)}</span>
+      lista.innerHTML = roteiro.length ? roteiro.map(({ id, tr }, i) => { const l = porLugar.get(id), ant = i ? porLugar.get(roteiro[i - 1].id) : null;
+        const trecho = ant ? `<li class="trecho"><select data-tr="${i}" aria-label="Como foi de ${esc(ant.nome)} até ${esc(l.nome)}"><option value="">Como foi?</option>${Object.entries(TRANSPORTES).map(([k, [ic, nm]]) => `<option value="${k}" ${tr === k ? 'selected' : ''}>${ic} ${nm}</option>`).join('')}</select><span>${fmtKm(Math.round(distKm(ant.lat, ant.lon, l.lat, l.lon)))}</span></li>` : '';
+        return trecho + `<li class="parada"><span class="num">${i + 1}</span><span class="tipo">${iconeDe(l)}</span>
         <span class="txt"><b>${esc(l.nome)}</b><small>${esc(nomeEstado(l.estado) || nomePais(l.pais))}</small></span>
         <span class="mover"><button type="button" data-sobe="${i}" aria-label="Subir" ${i ? '' : 'disabled'}>↑</button><button type="button" data-desce="${i}" aria-label="Descer" ${i < roteiro.length - 1 ? '' : 'disabled'}>↓</button><button type="button" data-tira="${i}" aria-label="Tirar">×</button></span></li>`; }).join('')
         : '<li class="meta">Nenhuma parada ainda. Use a busca abaixo.</li>';
-      let km = 0; for (let i = 1; i < roteiro.length; i++) { const a = porLugar.get(roteiro[i - 1]), b = porLugar.get(roteiro[i]); km += distKm(a.lat, a.lon, b.lat, b.lon); }
-      m.querySelector('#vg-km').textContent = roteiro.length > 1 ? `${fmtKm(Math.round(km))} em linha reta, somando os trechos` : '';
+      let km = 0; const tot = new Map();
+      for (let i = 1; i < roteiro.length; i++) { const a = porLugar.get(roteiro[i - 1].id), b = porLugar.get(roteiro[i].id), d = distKm(a.lat, a.lon, b.lat, b.lon); km += d; const k = roteiro[i].tr || 'sem'; tot.set(k, (tot.get(k) || 0) + d); }
+      const det = resumoTransportes(tot);
+      m.querySelector('#vg-km').textContent = roteiro.length > 1 ? `${fmtKm(Math.round(km))} em linha reta${det ? ' · ' + det : ''}` : '';
+      lista.querySelectorAll('[data-tr]').forEach(sel => sel.onchange = () => { roteiro[+sel.dataset.tr].tr = sel.value || null; desenharRoteiro(); });
       lista.querySelectorAll('[data-sobe]').forEach(b => b.onclick = () => { const i = +b.dataset.sobe; [roteiro[i - 1], roteiro[i]] = [roteiro[i], roteiro[i - 1]]; desenharRoteiro(); });
       lista.querySelectorAll('[data-desce]').forEach(b => b.onclick = () => { const i = +b.dataset.desce; [roteiro[i + 1], roteiro[i]] = [roteiro[i], roteiro[i + 1]]; desenharRoteiro(); });
       lista.querySelectorAll('[data-tira]').forEach(b => b.onclick = () => { roteiro.splice(+b.dataset.tira, 1); desenharRoteiro(); });
@@ -1680,7 +1713,7 @@ function editaViagem(vg, mesSugerido, aoSalvar) {
       if (q.length < 2) { achados.innerHTML = ''; return; }
       const res = S.lugares.filter(l => norm(l.nome + ' ' + nomeEstado(l.estado)).includes(q)).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).slice(0, 8);
       achados.innerHTML = res.length ? res.map(l => `<button type="button" data-add="${l.id}">${iconeDe(l)}<span><b>${esc(l.nome)}</b> <small>${esc(nomeEstado(l.estado) || nomePais(l.pais))}</small></span></button>`).join('') : '<span class="meta">Nenhum lugar seu com esse nome. Cadastre primeiro pelo mapa ou pela busca.</span>';
-      achados.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { roteiro.push(b.dataset.add); busca.value = ''; achados.innerHTML = ''; desenharRoteiro(); busca.focus(); });
+      achados.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { const ant = roteiro.length ? porLugar.get(roteiro[roteiro.length - 1].id) : null; roteiro.push({ id: b.dataset.add, tr: ant ? palpiteTransporte(ant, porLugar.get(b.dataset.add)) : null }); busca.value = ''; achados.innerHTML = ''; desenharRoteiro(); busca.focus(); });
     };
     m.querySelector('#vg-mapa').onclick = () => { if (roteiro.length < 1) return toast('Adicione paradas primeiro'); fechar(); mostraRoteiro(m.querySelector('#vg-nome').value.trim() || 'Viagem', roteiro); };
     m.querySelector('#vg-cancelar').onclick = fechar;
@@ -1700,12 +1733,12 @@ function editaViagem(vg, mesSugerido, aoSalvar) {
         else { const { data, error } = await supa.from('viagem_viagens').insert({ nome, inicio }).select().single(); if (error) throw error; id = data.id; S.viagens.push(data); }
         // roteiro: troca tudo pela ordem nova
         const { error: e1 } = await supa.from('viagem_paradas').delete().eq('viagem_id', id); if (e1) throw e1;
-        const { data: novas, error: e2 } = await supa.from('viagem_paradas').insert(roteiro.map((lugar_id, i) => ({ viagem_id: id, lugar_id, ordem: i + 1 }))).select(); if (e2) throw e2;
+        const { data: novas, error: e2 } = await supa.from('viagem_paradas').insert(roteiro.map((p, i) => ({ viagem_id: id, lugar_id: p.id, ordem: i + 1, transporte: i ? p.tr : null }))).select(); if (e2) throw e2;
         S.paradas = (S.paradas || []).filter(p => p.viagem_id !== id).concat(novas);
         // visitas: liga as do período (até ~2,5 meses do início) e cria as que faltam
         if (inicio) {
           const perto = d => Math.abs(new Date(d) - new Date(inicio)) < 75 * 864e5;
-          const lugares = [...new Set(roteiro)];
+          const lugares = [...new Set(roteiro.map(p => p.id))];
           const ligar = [], criar = [];
           for (const lid of lugares) {
             const v = (S.visitas || []).filter(x => x.lugar_id === lid && x.precisao !== 'ano' && (!x.viagem_id || x.viagem_id === id) && perto(x.data)).sort((a, b) => a.data.localeCompare(b.data))[0];
@@ -1726,10 +1759,15 @@ function editaViagem(vg, mesSugerido, aoSalvar) {
 let camadaRoteiro = null;
 function mostraRoteiro(nome, roteiro) {
   const porLugar = new Map(S.lugares.map(l => [l.id, l]));
-  const pts = roteiro.map(id => porLugar.get(id)).filter(Boolean);
+  const paradas = roteiro.filter(p => porLugar.has(p.id)), pts = paradas.map(p => porLugar.get(p.id));
   if (camadaRoteiro) camadaRoteiro.remove();
+  // avião pontilhado, barco tracejado azul, terra linha cheia, sem informação tracejado
+  const estilo = { aviao: { dashArray: '2 8' }, barco: { dashArray: '10 6', color: '#2b7bb9' }, onibus: { dashArray: null, weight: 4 }, carro: { dashArray: null, weight: 4 }, trem: { dashArray: null, weight: 4, color: '#6d4aa8' } };
+  const trechos = pts.slice(1).map((b, i) => { const a = pts[i], tr = paradas[i + 1].tr;
+    return L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: corToken('--accent'), opacity: 0.9, weight: 3, dashArray: '6 6', ...(estilo[tr] || {}) })
+      .bindTooltip(`${tr ? TRANSPORTES[tr].join(' ') + ' · ' : ''}${fmtKm(Math.round(distKm(a.lat, a.lon, b.lat, b.lon)))}`, { sticky: true }); });
   camadaRoteiro = L.layerGroup([
-    L.polyline(pts.map(l => [l.lat, l.lon]), { color: corToken('--accent'), weight: 3, opacity: 0.9, dashArray: '6 6' }),
+    ...trechos,
     ...pts.map((l, i) => L.marker([l.lat, l.lon], { zIndexOffset: 1000, icon: L.divIcon({ className: 'num-roteiro', html: `<div>${i + 1}</div>`, iconSize: [0, 0] }), title: l.nome })),
   ]).addTo(mapa);
   if (pts.length) mapa.fitBounds(L.latLngBounds(pts.map(l => [l.lat, l.lon])).pad(0.2));
@@ -1778,7 +1816,7 @@ function abreLinhaDoTempo() {
     m.querySelector('#lt-fechar').onclick = fechar;
     m.querySelector('#lt-viagens').onclick = () => { fechar(); abreViagens(); };
     m.querySelectorAll('[data-vg]').forEach(b => b.onclick = () => { fechar(); editaViagem(S.viagens.find(x => x.id === b.dataset.vg), null, abreLinhaDoTempo); });
-    m.querySelectorAll('[data-rota]').forEach(b => b.onclick = () => { fechar(); const vg = S.viagens.find(x => x.id === b.dataset.rota); mostraRoteiro(vg.nome, paradasDe(vg.id).map(p => p.lugar_id)); });
+    m.querySelectorAll('[data-rota]').forEach(b => b.onclick = () => { fechar(); const vg = S.viagens.find(x => x.id === b.dataset.rota); mostraRoteiro(vg.nome, paradasDe(vg.id).map(p => ({ id: p.lugar_id, tr: p.transporte || null }))); });
     m.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { fechar(); const l = porLugar.get(b.dataset.ir); S.aba = l.tipo === 'aeroporto' || l.tipo === 'porto' ? 'transporte' : l.tipo; atualizaTudo(); abreLugar(l.id); });
   });
 }
@@ -1810,7 +1848,7 @@ function abreEstatisticas() {
   const cidadesVis = visitados.filter(l => l.tipo === 'cidade');
   const ext = k => cidadesVis.reduce((m, l) => !m || k(l, m) ? l : m, null);
   const norte = ext((a, b) => a.lat > b.lat), sul = ext((a, b) => a.lat < b.lat), leste = ext((a, b) => a.lon > b.lon), oeste = ext((a, b) => a.lon < b.lon);
-  const porTipo = {}; visitados.forEach(l => { const t = ehParque(l) ? 'parque' : l.tipo; porTipo[t] = (porTipo[t] || 0) + 1; });
+  const so = idsSoLugar(), porTipo = {}; S.lugares.filter(l => visitado(l.id, vis) || soLugar(l.id, so)).forEach(l => { const t = ehParque(l) ? 'parque' : l.tipo; porTipo[t] = (porTipo[t] || 0) + 1; });
   const NOMES_T = { cidade: 'Cidades', unesco: 'Patrimônios UNESCO', aeroporto: 'Aeroportos', porto: 'Portos', atracao: 'Atrações', parque: 'Parques nacionais', outro: 'Outros lugares' };
   const porRot = S.rotulos.map(r => [r, S.lugares.filter(l => rotulosDe(l.id).has(r.id)).length]);
   abreModal(`
@@ -1827,7 +1865,8 @@ function abreEstatisticas() {
       <span>Viagens registradas</span><b>${num(S.viagens.length)}</b>
       <span>Distância percorrida (linha reta)</span><b>${fmtKm(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0))}</b>
       ${(() => { const maior = [...S.viagens].sort((a, b) => kmViagem(b.id) - kmViagem(a.id))[0]; return maior ? `<span>Mais longa: ${esc(maior.nome)}</span><b>${fmtKm(kmViagem(maior.id))}</b>` : ''; })()}
-      <span>Voltas na Terra</span><b>${(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0) / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b></div>` : ''}
+      <span>Voltas na Terra</span><b>${(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0) / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b>
+      ${(() => { const tot = kmPorTransporte(); return [...Object.keys(TRANSPORTES), 'sem'].filter(k => tot.get(k) >= 0.5).map(k => `<span>${k === 'sem' ? 'Trechos sem transporte marcado' : TRANSPORTES[k].join(' ')}</span><b>${fmtKm(Math.round(tot.get(k)))}</b>`).join(''); })()}</div>` : ''}
     <h4>Brasil</h4>
     ${barra('Estados', ufsBR, 27)}${barra('Municípios', munBR, S.mun?.length || 5570)}
     <h4>O que você já marcou</h4>
@@ -2009,7 +2048,8 @@ async function geraCard() {
   c.fillStyle = '#f2e8d5'; c.font = `800 72px ${fd}`; c.fillText(S.publico && S.nomePublico ? `Viagens de ${S.nomePublico}` : 'Por onde andei', 60, 130);
   c.fillStyle = '#e4572e'; c.font = `600 34px ${fb}`; c.fillText(`${paisesVis.size} ${paisesVis.size === 1 ? 'país' : 'países'} · ${estadosVis.size} estados`, 60, 185);
   const vis = idsVisita(), cont = { cidade: 0, unesco: 0, aeroporto: 0, atracao: 0 };
-  S.lugares.forEach(l => { if (visitado(l.id, vis) && l.tipo in cont) cont[l.tipo]++; });
+  const so = idsSoLugar();
+  S.lugares.forEach(l => { if ((visitado(l.id, vis) || soLugar(l.id, so)) && l.tipo in cont) cont[l.tipo]++; });
   const itens = [[cont.cidade, 'cidades'], [cont.unesco, 'patrimônios UNESCO'], [cont.aeroporto, 'aeroportos'], [cont.atracao, 'atrações e parques']];
   const by = my + mh + 60, bw = (W - 120 - 30) / 2, bh = 190;
   itens.forEach(([n, t], i) => {
