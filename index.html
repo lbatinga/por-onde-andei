@@ -539,6 +539,7 @@ function desenhaBase() {
     if (!bb.contains([b.lat, b.lon]) || lugarDaRef(b.ref)) continue;
     if (S.aba === 'transporte' && z < 7 && !b.grande) continue;
     if (S.aba === 'atracao' && ehParque(b) && z < 6) continue;
+    if (S.aba === 'atracao' && !ehParque(b) && z < 7 && (b.rel || 0) < 20) continue;
     n++;
     const m = L.marker([b.lat, b.lon], { icon: L.divIcon({ className: `pino base ${b.tipo}`, html: `<div style="--cb:${corBase(b)}">${iconeDe(b)}</div>`, iconSize: [0, 0] }), title: b.nome });
     m.on('click', () => abreBase(b.ref));
@@ -791,7 +792,7 @@ function renderLista() {
     const base = S.publico ? [] : basePorAba(aba);
     if (base.length) {
       const z = mapa ? mapa.getZoom() : 2;
-      const outros = base.filter(b => !lugarDaRef(b.ref) && visivel(b) && (!f || norm(b.nome + ' ' + b.sub).includes(f)) && (aba !== 'transporte' || b.grande || z >= 6 || f) && (aba !== 'atracao' || !ehParque(b) || z >= 5 || f));
+      const outros = base.filter(b => !lugarDaRef(b.ref) && visivel(b) && (!f || norm(b.nome + ' ' + b.sub).includes(f)) && (aba !== 'transporte' || b.grande || z >= 6 || f) && (aba !== 'atracao' || f || (ehParque(b) ? z >= 5 : (z >= 6 || (b.rel || 0) >= 20))));
       outros.sort((a, b) => (b.rel || 0) - (a.rel || 0) || (b.grande || 0) - (a.grande || 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
       if (outros.length) html += `<div class="grupo"><span>${aba === 'unesco' ? 'Outros patrimônios nesta área' : aba === 'atracao' ? 'Outras atrações e parques nesta área' : 'Outros aeroportos nesta área'}</span><span>${outros.length}</span></div>`
         + outros.slice(0, 150).map(linhaBase).join('')
