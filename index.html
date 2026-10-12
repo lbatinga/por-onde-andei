@@ -308,6 +308,7 @@ button { cursor: pointer; }
 .escolha-mun span { display: grid; }
 .escolha-mun small { color: var(--muted); }
 .trecho span { white-space: nowrap; }
+.trecho.local span { font-style: italic; }
 .trecho select { width: auto; flex: 0 0 auto; padding: 3px 6px; border: 1px dashed var(--line); border-radius: 99px; background: transparent; color: var(--ink); font: inherit; font-size: .8rem; }
 .resumo-import { background: var(--surface-2); border-radius: 8px; padding: 12px; font-size: .9rem; display: grid; gap: 4px; }
 .resumo-import ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); max-height: 180px; overflow: auto; }
@@ -1768,13 +1769,20 @@ function kmPorTransporte(ids) { // ids: viagens (todas se omitido)
   for (const vg of S.viagens || []) {
     if (ids && !ids.includes(vg.id)) continue;
     const ps = paradasDe(vg.id).filter(p => porLugar.has(p.lugar_id));
-    for (let i = 1; i < ps.length; i++) { const a = porLugar.get(ps[i - 1].lugar_id), b = porLugar.get(ps[i].lugar_id), k = ps[i].transporte || 'sem'; tot.set(k, (tot.get(k) || 0) + distKm(a.lat, a.lon, b.lat, b.lon)); }
+    for (let i = 1; i < ps.length; i++) { const a = porLugar.get(ps[i - 1].lugar_id), b = porLugar.get(ps[i].lugar_id), k = trechoLocal(a, b) ? 'local' : (ps[i].transporte || 'sem'); tot.set(k, (tot.get(k) || 0) + distKm(a.lat, a.lon, b.lat, b.lon)); }
   }
   return tot;
 }
-const resumoTransportes = tot => [...tot].filter(([k]) => k !== 'sem').sort((a, b) => b[1] - a[1]).map(([k, km]) => `${TRANSPORTES[k][0]} ${fmtKm(Math.round(km))}`).join(' · ');
+const resumoTransportes = tot => [...tot].filter(([k]) => TRANSPORTES[k]).sort((a, b) => b[1] - a[1]).map(([k, km]) => `${TRANSPORTES[k][0]} ${fmtKm(Math.round(km))}`).join(' · ');
+// trajeto local: entre aeroporto/porto e um lugar a até 60 km (GRU–Guarulhos, MCZ–Maceió); não pergunta transporte
+const TERMINAIS = ['aeroporto', 'porto'];
+const trechoLocal = (a, b) => (TERMINAIS.includes(a.tipo) || TERMINAIS.includes(b.tipo)) && a.tipo !== b.tipo && distKm(a.lat, a.lon, b.lat, b.lon) <= 60;
 // palpite inicial: aeroporto→aeroporto é avião; porto→porto é barco
-function palpiteTransporte(a, b) { if (a.tipo === 'aeroporto' && b.tipo === 'aeroporto') return 'aviao'; if (a.tipo === 'porto' && b.tipo === 'porto') return 'barco'; return null; }
+function palpiteTransporte(a, b) {
+  if ((a.tipo === 'aeroporto' || b.tipo === 'aeroporto') && (a.tipo === b.tipo || distKm(a.lat, a.lon, b.lat, b.lon) > 150)) return 'aviao'; // saiu/chegou de aeroporto e foi longe
+  if (a.tipo === 'porto' && b.tipo === 'porto') return 'barco';
+  return null;
+}
 const paradasDe = id => (S.paradas || []).filter(p => p.viagem_id === id).sort((a, b) => a.ordem - b.ordem);
 function periodoViagem(vg) {
   const ds = (S.visitas || []).filter(v => v.viagem_id === vg.id).map(v => v.data).concat(vg.inicio ? [vg.inicio] : []).sort();
@@ -1834,13 +1842,14 @@ function editaViagem(vg, mesSugerido, aoSalvar) {
     const lista = m.querySelector('#vg-roteiro');
     const desenharRoteiro = () => {
       lista.innerHTML = roteiro.length ? roteiro.map(({ id, tr }, i) => { const l = porLugar.get(id), ant = i ? porLugar.get(roteiro[i - 1].id) : null;
-        const trecho = ant ? `<li class="trecho"><select data-tr="${i}" aria-label="Como foi de ${esc(ant.nome)} até ${esc(l.nome)}"><option value="">Como foi?</option>${Object.entries(TRANSPORTES).map(([k, [ic, nm]]) => `<option value="${k}" ${tr === k ? 'selected' : ''}>${ic} ${nm}</option>`).join('')}</select><span>${fmtKm(Math.round(distKm(ant.lat, ant.lon, l.lat, l.lon)))}</span></li>` : '';
+        const trecho = ant && trechoLocal(ant, l) ? `<li class="trecho local"><span>Trajeto local · ${fmtKm(Math.round(distKm(ant.lat, ant.lon, l.lat, l.lon)))}</span></li>`
+          : ant ? `<li class="trecho"><select data-tr="${i}" aria-label="Como foi de ${esc(ant.nome)} até ${esc(l.nome)}"><option value="">Como foi?</option>${Object.entries(TRANSPORTES).map(([k, [ic, nm]]) => `<option value="${k}" ${tr === k ? 'selected' : ''}>${ic} ${nm}</option>`).join('')}</select><span>${fmtKm(Math.round(distKm(ant.lat, ant.lon, l.lat, l.lon)))}</span></li>` : '';
         return trecho + `<li class="parada"><span class="num">${i + 1}</span><span class="tipo">${iconeDe(l)}</span>
         <span class="txt"><b>${esc(l.nome)}</b><small>${esc(nomeEstado(l.estado) || nomePais(l.pais))}</small></span>
         <span class="mover"><button type="button" data-sobe="${i}" aria-label="Subir" ${i ? '' : 'disabled'}>↑</button><button type="button" data-desce="${i}" aria-label="Descer" ${i < roteiro.length - 1 ? '' : 'disabled'}>↓</button><button type="button" data-tira="${i}" aria-label="Tirar">×</button></span></li>`; }).join('')
         : '<li class="meta">Nenhuma parada ainda. Use a busca abaixo.</li>';
       let km = 0; const tot = new Map();
-      for (let i = 1; i < roteiro.length; i++) { const a = porLugar.get(roteiro[i - 1].id), b = porLugar.get(roteiro[i].id), d = distKm(a.lat, a.lon, b.lat, b.lon); km += d; const k = roteiro[i].tr || 'sem'; tot.set(k, (tot.get(k) || 0) + d); }
+      for (let i = 1; i < roteiro.length; i++) { const a = porLugar.get(roteiro[i - 1].id), b = porLugar.get(roteiro[i].id), d = distKm(a.lat, a.lon, b.lat, b.lon); km += d; const k = trechoLocal(a, b) ? 'local' : (roteiro[i].tr || 'sem'); tot.set(k, (tot.get(k) || 0) + d); }
       const det = resumoTransportes(tot);
       m.querySelector('#vg-km').textContent = roteiro.length > 1 ? `${fmtKm(Math.round(km))} em linha reta${det ? ' · ' + det : ''}` : '';
       lista.querySelectorAll('[data-tr]').forEach(sel => sel.onchange = () => { roteiro[+sel.dataset.tr].tr = sel.value || null; desenharRoteiro(); });
@@ -1875,7 +1884,7 @@ function editaViagem(vg, mesSugerido, aoSalvar) {
         else { const { data, error } = await supa.from('viagem_viagens').insert({ nome, inicio }).select().single(); if (error) throw error; id = data.id; S.viagens.push(data); }
         // roteiro: troca tudo pela ordem nova
         const { error: e1 } = await supa.from('viagem_paradas').delete().eq('viagem_id', id); if (e1) throw e1;
-        const { data: novas, error: e2 } = await supa.from('viagem_paradas').insert(roteiro.map((p, i) => ({ viagem_id: id, lugar_id: p.id, ordem: i + 1, transporte: i ? p.tr : null }))).select(); if (e2) throw e2;
+        const { data: novas, error: e2 } = await supa.from('viagem_paradas').insert(roteiro.map((p, i) => ({ viagem_id: id, lugar_id: p.id, ordem: i + 1, transporte: i && !trechoLocal(porLugar.get(roteiro[i - 1].id), porLugar.get(p.id)) ? p.tr : null }))).select(); if (e2) throw e2;
         S.paradas = (S.paradas || []).filter(p => p.viagem_id !== id).concat(novas);
         // visitas: liga as do período (até ~2,5 meses do início) e cria as que faltam
         if (inicio) {
@@ -1905,9 +1914,9 @@ function mostraRoteiro(nome, roteiro) {
   if (camadaRoteiro) camadaRoteiro.remove();
   // avião pontilhado, barco tracejado azul, terra linha cheia, sem informação tracejado
   const estilo = { aviao: { dashArray: '2 8' }, barco: { dashArray: '10 6', color: '#2b7bb9' }, onibus: { dashArray: null, weight: 4 }, carro: { dashArray: null, weight: 4 }, trem: { dashArray: null, weight: 4, color: '#6d4aa8' } };
-  const trechos = pts.slice(1).map((b, i) => { const a = pts[i], tr = paradas[i + 1].tr;
-    return L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: corToken('--accent'), opacity: 0.9, weight: 3, dashArray: '6 6', ...(estilo[tr] || {}) })
-      .bindTooltip(`${tr ? TRANSPORTES[tr].join(' ') + ' · ' : ''}${fmtKm(Math.round(distKm(a.lat, a.lon, b.lat, b.lon)))}`, { sticky: true }); });
+  const trechos = pts.slice(1).map((b, i) => { const a = pts[i], local = trechoLocal(a, b), tr = local ? null : paradas[i + 1].tr;
+    return L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: corToken('--accent'), opacity: 0.9, weight: 3, dashArray: '6 6', ...(local ? { dashArray: null, weight: 2, color: '#6b7c7d' } : estilo[tr] || {}) })
+      .bindTooltip(`${local ? 'Trajeto local · ' : tr ? TRANSPORTES[tr].join(' ') + ' · ' : ''}${fmtKm(Math.round(distKm(a.lat, a.lon, b.lat, b.lon)))}`, { sticky: true }); });
   camadaRoteiro = L.layerGroup([
     ...trechos,
     ...pts.map((l, i) => L.marker([l.lat, l.lon], { zIndexOffset: 1000, icon: L.divIcon({ className: 'num-roteiro', html: `<div>${i + 1}</div>`, iconSize: [0, 0] }), title: l.nome })),
@@ -2008,7 +2017,7 @@ function abreEstatisticas() {
       <span>Distância percorrida (linha reta)</span><b>${fmtKm(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0))}</b>
       ${(() => { const maior = [...S.viagens].sort((a, b) => kmViagem(b.id) - kmViagem(a.id))[0]; return maior ? `<span>Mais longa: ${esc(maior.nome)}</span><b>${fmtKm(kmViagem(maior.id))}</b>` : ''; })()}
       <span>Voltas na Terra</span><b>${(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0) / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b>
-      ${(() => { const tot = kmPorTransporte(); return [...Object.keys(TRANSPORTES), 'sem'].filter(k => tot.get(k) >= 0.5).map(k => `<span>${k === 'sem' ? 'Trechos sem transporte marcado' : TRANSPORTES[k].join(' ')}</span><b>${fmtKm(Math.round(tot.get(k)))}</b>`).join(''); })()}</div>` : ''}
+      ${(() => { const tot = kmPorTransporte(); return [...Object.keys(TRANSPORTES), 'local', 'sem'].filter(k => tot.get(k) >= 0.5).map(k => `<span>${k === 'sem' ? 'Trechos sem transporte marcado' : k === 'local' ? 'Trajetos até aeroportos e portos' : TRANSPORTES[k].join(' ')}</span><b>${fmtKm(Math.round(tot.get(k)))}</b>`).join(''); })()}</div>` : ''}
     <h4>Brasil</h4>
     ${barra('Estados', ufsBR, 27)}${barra('Municípios', munBR, S.mun?.length || 5570)}
     <h4>O que você já marcou</h4>
