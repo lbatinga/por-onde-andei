@@ -23,6 +23,18 @@
   --r: 10px;
   color-scheme: light;
 }
+/* App segue o tema do aparelho; o mapa fica sempre claro (--map-* não mudam) */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0b1719; --surface: #122326; --surface-2: #0f1e20; --ink: #e4eeed; --muted: #8fa5a6; --line: #22393c;
+  --primary: #0e2c30; --on-primary: #f2e8d5; --accent: #f06a43; --visit: #2fb3a3; --want: #e9b949;
+  --danger: #ef6b5e; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0b1719; --surface: #122326; --surface-2: #0f1e20; --ink: #e4eeed; --muted: #8fa5a6; --line: #22393c;
+  --primary: #0e2c30; --on-primary: #f2e8d5; --accent: #f06a43; --visit: #2fb3a3; --want: #e9b949;
+  --danger: #ef6b5e; color-scheme: dark; }
+:root[data-theme="dark"] .item .tipo { color: var(--on-primary); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .item .tipo { color: var(--on-primary); } }
+
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--f-body); -webkit-tap-highlight-color: transparent; }
