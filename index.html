@@ -210,7 +210,16 @@ button { cursor: pointer; }
 .abas-band button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .abas-band b { color: var(--visit); margin-left: 4px; }
 .grupo-band { display: flex; justify-content: space-between; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; margin-top: 4px; }
-.band-card.quero { opacity: .45; filter: grayscale(.8); }
+.band-card.quero { opacity: .55; filter: grayscale(.6); border-style: dashed; }
+.band-card.falta { opacity: .35; filter: grayscale(1); }
+.band-card.falta small { color: var(--muted); }
+.band-opcoes { display: flex; justify-content: flex-end; margin: 6px 0 2px; }
+.band-opcoes .album { display: flex; gap: 6px; align-items: center; font-size: .85rem; color: var(--muted); }
+.band-opcoes .album input { accent-color: var(--visit); width: 16px; height: 16px; }
+.seg { display: flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 99px; }
+.seg button { border: 0; background: none; padding: 5px 12px; border-radius: 99px; font: inherit; font-size: .85rem; color: var(--muted); font-weight: 600; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.abas-band button { padding: 8px 4px; font-size: .9rem; }
 .selo { font-size: .72rem; font-weight: 700; color: #fff; background: var(--c); border-radius: 99px; padding: 3px 8px; white-space: nowrap; }
 .menu-link { display: block; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); color: var(--accent); font-weight: 700; text-decoration: none; }
 .publico .busca, .publico .fab { display: none !important; }
@@ -1707,21 +1716,25 @@ async function secaoFotos(m, lugarId) {
 
 /* ================= Mapa de bandeiras ================= */
 // Países visitados pintados com a própria bandeira (imagens da flagcdn.com)
-function carregaImg(src) {
-  return new Promise(ok => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
+function carregaImg(src, cors = true) {
+  return new Promise(ok => { const i = new Image(); if (cors) i.crossOrigin = 'anonymous'; i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
 }
-async function desenhaMapaBandeiras(canvas) {
+async function desenhaMapaBandeiras(canvas, modo = 'paises', arquivos = {}) {
   calcula();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const W = canvas.clientWidth * dpr, H = Math.round(W * 0.75); canvas.width = W; canvas.height = H; canvas.style.height = (H / dpr) + 'px';
   const c = canvas.getContext('2d');
-  const vis = S.paises.filter(p => paisesVis.has(p.id));
-  // enquadra os países visitados (com folga); sem nenhum, mostra o mundo
-  let [x0, y0, x1, y1] = vis.length ? vis.reduce((b, p) => [Math.min(b[0], p.maior[0]), Math.min(b[1], p.maior[1]), Math.max(b[2], p.maior[2]), Math.max(b[3], p.maior[3])], [180, 90, -180, -90]) : [-170, -58, 190, 84];
-  const padX = Math.max(8, (x1 - x0) * 0.25), padY = Math.max(6, (y1 - y0) * 0.15);
+  // modo 'paises': países visitados com a bandeira; modo 'estados': estados do país da sua casa
+  const paisBase = casa()?.pais || 'BR';
+  const feicoes = modo === 'estados' ? S.estados.filter(e => e.pais === paisBase) : S.paises;
+  const vis = feicoes.filter(f => (modo === 'estados' ? estadosVis : paisesVis).has(f.id));
+  const enquadrar = modo === 'estados' ? feicoes : vis;
+  // enquadra (com folga); sem nenhum, mostra o mundo
+  let [x0, y0, x1, y1] = enquadrar.length ? enquadrar.reduce((b, p) => [Math.min(b[0], p.maior[0]), Math.min(b[1], p.maior[1]), Math.max(b[2], p.maior[2]), Math.max(b[3], p.maior[3])], [180, 90, -180, -90]) : [-170, -58, 190, 84];
+  const folga = modo === 'estados' ? [0.06, 0.05] : [0.25, 0.15];
+  const padX = Math.max(modo === 'estados' ? 1 : 8, (x1 - x0) * folga[0]), padY = Math.max(modo === 'estados' ? 1 : 6, (y1 - y0) * folga[1]);
   x0 -= padX; x1 += padX; y0 -= padY; y1 += padY;
   const latMeio = (y0 + y1) / 2, kx = Math.cos(latMeio * Math.PI / 180);
-  // mantém a proporção do quadro
   let lw = (x1 - x0) * kx, lh = y1 - y0;
   if (lw / lh > W / H) { const nh = lw * H / W; y0 -= (nh - lh) / 2; y1 += (nh - lh) / 2; lh = nh; } else { const nw = lh * W / H; x0 -= (nw - lw) / kx / 2; x1 += (nw - lw) / kx / 2; lw = nw; }
   const px = lon => (lon - x0) * kx / lw * W, py = lat => (y1 - lat) / lh * H;
@@ -1729,7 +1742,12 @@ async function desenhaMapaBandeiras(canvas) {
   c.fillStyle = '#cfe3ea'; c.fillRect(0, 0, W, H);
   c.lineWidth = dpr * 0.6; c.strokeStyle = '#ffffff';
   for (const p of S.paises) { if (p.bbox[2] < x0 - 10 || p.bbox[0] > x1 + 10) continue; caminho(p); c.fillStyle = '#e9e4da'; c.fill('evenodd'); c.stroke(); }
-  const imgs = await Promise.all(vis.map(p => /^[A-Z]{2}$/.test(p.id) ? carregaImg(`https://flagcdn.com/w640/${p.id.toLowerCase()}.png`) : null));
+  if (modo === 'estados') for (const e of feicoes) { caminho(e); c.fillStyle = '#ddd6c8'; c.fill('evenodd'); c.strokeStyle = '#ffffff'; c.stroke(); }
+  const src = f => modo === 'estados'
+    ? (arquivos[isoEstado(f.id)] ? urlBandeira(arquivos[isoEstado(f.id)]).replace('width=160', 'width=480') : null)
+    : (/^[A-Z]{2}$/.test(f.id) ? `https://flagcdn.com/w640/${f.id.toLowerCase()}.png` : null);
+  // estados vêm do Wikimedia: sem crossOrigin (o quadro só é exibido, não exportado)
+  const imgs = await Promise.all(vis.map(f => src(f) ? carregaImg(src(f), modo !== 'estados') : null));
   vis.forEach((p, i) => {
     c.save(); caminho(p); c.clip('evenodd');
     const img = imgs[i], [a, b, d, e] = p.maior;
@@ -2111,52 +2129,105 @@ function abreEstatisticas() {
 const ISO_REGIAO = {"FR-RGUYANEFRAN":"FR-GUF","FR-RHAUTSDEFRA":"FR-HDF","FR-RGRANDEST":"FR-GES","ES-RCEUTA":"ES-CE","IT-RVALLEDAOST":"IT-23","IT-RPIEMONTE":"IT-21","IT-RLOMBARDIA":"IT-25","IT-RTRENTINOAL":"IT-32","IT-RLIGURIA":"IT-42","FR-RPROVENCEAL":"FR-PAC","FR-RAUVERGNERH":"FR-ARA","ES-RMELILLA":"ES-ML","IT-REMILIAROMA":"IT-45","IT-RMARCHE":"IT-57","IT-RVENETO":"IT-34","IT-RFRIULIVENE":"IT-36","FR-RNOUVELLEAQ":"FR-NAQ","ES-RFORALDENAV":"ES-NA","ES-RPAISVASCO":"ES-PV","ES-RARAGON":"ES-AR","FR-ROCCITANIE":"FR-OCC","ES-RCATALUNA":"ES-CT","FR-RBOURGOGNEF":"FR-BFC","ES-REXTREMADUR":"ES-EX","ES-RANDALUCIA":"ES-AN","ES-RGALICIA":"ES-GA","ES-RCASTILLAYL":"ES-CL","IT-RABRUZZO":"IT-65","IT-RMOLISE":"IT-67","IT-RAPULIA":"IT-75","IT-RBASILICATA":"IT-77","IT-RCALABRIA":"IT-78","IT-RCAMPANIA":"IT-72","IT-RLAZIO":"IT-62","IT-RTOSCANA":"IT-52","ES-RVALENCIANA":"ES-VC","ES-RMURCIA":"ES-MU","ES-RASTURIAS":"ES-AS","ES-RCANTABRIA":"ES-CB","FR-RPAYSDELALO":"FR-PDL","FR-RBRETAGNE":"FR-BRE","FR-RNORMANDIE":"FR-NOR","FR-RMARTINIQUE":"FR-MTQ","FR-RGUADELOUPE":"FR-GUA","FR-RREUNION":"FR-LRE","FR-RMAYOTTE":"FR-MAY","ES-RCANARYIS":"ES-CN","IT-RSICILY":"IT-82","ES-RISLASBALEA":"ES-PM","IT-RSARDEGNA":"IT-88","FR-RCORSE":"FR-COR","ES-RLARIOJA":"ES-LO","ES-RCASTILLALA":"ES-CM","IT-RUMBRIA":"IT-55","FR-RCENTREVALD":"FR-CVL","FR-RILEDEFRANC":"FR-IDF","ES-RMADRID":"ES-MD"};
 const isoEstado = id => ISO_REGIAO[id] || id;
 const urlBandeira = arq => `https://commons.wikimedia.org/wiki/Special:FilePath/${arq}?width=160`;
+let albumCompleto = (() => { try { return localStorage.getItem('poa-album') !== '0'; } catch { return true; } })();
 async function abreBandeiras(abaInicial = 'paises') {
   calcula();
+  const vis = idsVisita();
   const ord = ids => [...ids].sort((a, b) => nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
-  const card = (id, quero) => `<button class="band-card${quero ? ' quero' : ''}" data-pais="${esc(id)}"><span>${bandeira(id)}</span><small>${esc(nomePais(id))}</small></button>`;
+  // classe do cartão: visitado, quero ir ou falta (cinza, só no álbum completo)
+  const estado = (set, quero, id) => set.has(id) ? '' : quero.has(id) ? ' quero' : ' falta';
+  const card = id => `<button class="band-card${estado(paisesVis, paisesQuero, id)}" data-pais="${esc(id)}"><span>${bandeira(id)}</span><small>${esc(nomePais(id))}</small></button>`;
+  // estados de cada país com algum estado visitado (o álbum mostra todos eles)
+  const paisesComEstado = new Set([...estadosVis].map(id => S.estadoPorId.get(id)?.pais).filter(Boolean));
+  const paisCasa = casa()?.pais || 'BR'; paisesComEstado.add(paisCasa);
+  const todosEstados = S.estados.filter(e => paisesComEstado.has(e.pais)).map(e => e.id);
   let arquivos = {};
-  const codigos = [...estadosVis, ...estadosQuero].map(isoEstado);
-  if (codigos.length) {
-    const { data } = await supa.from('viagem_bandeiras').select('codigo,arquivo').in('codigo', codigos);
-    (data || []).forEach(r => arquivos[r.codigo] = r.arquivo);
+  {
+    const codigos = [...new Set([...todosEstados, ...estadosQuero].map(isoEstado))].concat(CAPITAIS.map(c => 'ibge:' + c));
+    for (let i = 0; i < codigos.length; i += 150) {
+      const { data } = await supa.from('viagem_bandeiras').select('codigo,arquivo').in('codigo', codigos.slice(i, i + 150));
+      (data || []).forEach(r => arquivos[r.codigo] = r.arquivo);
+    }
   }
-  const cardEstado = (id, quero) => {
-    const arq = arquivos[isoEstado(id)], pais = S.estadoPorId.get(id)?.pais;
-    const img = arq ? `<img src="${urlBandeira(arq)}" alt="" loading="lazy" onerror="this.replaceWith(document.createTextNode('${bandeira(pais)}'))">` : `<span>${bandeira(pais)}</span>`;
-    return `<button class="band-card estado${quero ? ' quero' : ''}" data-estado="${esc(id)}">${img}<small>${esc(nomeEstado(id))}</small></button>`;
+  const imgBand = (arq, reserva) => arq ? `<img src="${urlBandeira(arq)}" alt="" loading="lazy" onerror="this.outerHTML='<span>${reserva}</span>'">` : `<span>${reserva}</span>`;
+  const cardEstado = id => {
+    const pais = S.estadoPorId.get(id)?.pais;
+    return `<button class="band-card estado${estado(estadosVis, estadosQuero, id)}" data-estado="${esc(id)}">${imgBand(arquivos[isoEstado(id)], bandeira(pais))}<small>${esc(nomeEstado(id))}</small></button>`;
   };
-  const porPais = ids => {
-    const g = new Map(); [...ids].forEach(id => { const p = S.estadoPorId.get(id)?.pais || '?'; if (!g.has(p)) g.set(p, []); g.get(p).push(id); });
-    return [...g].sort((a, b) => nomePais(a[0]).localeCompare(nomePais(b[0]), 'pt-BR'));
-  };
+  const porNome = (a, b) => nomeEstado(a).localeCompare(nomeEstado(b), 'pt-BR');
   const htmlEstados = () => {
     let h = '';
-    for (const [p, ids] of porPais(estadosVis)) {
-      const total = S.estados.filter(e => e.pais === p).length;
-      h += `<div class="grupo-band"><span>${bandeira(p)} ${esc(nomePais(p))}</span><span>${ids.length} de ${total}</span></div>`;
-      h += `<div class="bandeiras">${ids.sort((a, b) => nomeEstado(a).localeCompare(nomeEstado(b), 'pt-BR')).map(id => cardEstado(id)).join('')}</div>`;
+    const grupos = [...paisesComEstado].sort((a, b) => (b === paisCasa) - (a === paisCasa) || nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
+    for (const p of grupos) {
+      const ids = S.estados.filter(e => e.pais === p).map(e => e.id), feitos = ids.filter(id => estadosVis.has(id));
+      if (!feitos.length && !albumCompleto) continue;
+      const mostrar = albumCompleto ? ids : feitos;
+      h += `<div class="grupo-band"><span>${bandeira(p)} ${esc(nomePais(p))}</span><span>${feitos.length} de ${ids.length}</span></div>`;
+      h += `<div class="bandeiras">${mostrar.sort((a, b) => estadosVis.has(b) - estadosVis.has(a) || porNome(a, b)).map(cardEstado).join('')}</div>`;
     }
-    if (estadosQuero.size) h += `<h4>Quero ir</h4><div class="bandeiras">${[...estadosQuero].map(id => cardEstado(id, true)).join('')}</div>`;
+    const outros = [...estadosQuero].filter(id => !paisesComEstado.has(S.estadoPorId.get(id)?.pais));
+    if (outros.length) h += `<h4>Quero ir</h4><div class="bandeiras">${outros.sort(porNome).map(cardEstado).join('')}</div>`;
     return h || '<p>Nenhum estado visitado ainda.</p>';
   };
-  const htmlPaises = () => `<div class="bandeiras">${ord(paisesVis).map(id => card(id)).join('')}</div>
-    ${paisesQuero.size ? `<h4>Quero ir</h4><div class="bandeiras">${ord(paisesQuero).map(id => card(id, true)).join('')}</div>` : ''}`;
+  const htmlPaises = () => {
+    let h = '';
+    if (albumCompleto) {
+      // álbum por continente: todos os países dos continentes onde você já esteve
+      const conts = new Map();
+      S.paises.forEach(p => { const c = CONTINENTES[p.continente] || 'Outros'; if (!conts.has(c)) conts.set(c, []); conts.get(c).push(p.id); });
+      const visitados = [...conts].filter(([, ids]) => ids.some(id => paisesVis.has(id))).sort((a, b) => b[1].filter(id => paisesVis.has(id)).length - a[1].filter(id => paisesVis.has(id)).length);
+      for (const [c, ids] of visitados) {
+        const feitos = ids.filter(id => paisesVis.has(id)).length;
+        h += `<div class="grupo-band"><span>${esc(c)}</span><span>${feitos} de ${ids.length}</span></div>`;
+        h += `<div class="bandeiras">${ord(ids).sort((a, b) => paisesVis.has(b) - paisesVis.has(a)).map(card).join('')}</div>`;
+      }
+      const jaMostrados = new Set(visitados.flatMap(([, ids]) => ids));
+      const quero = ord(paisesQuero).filter(id => !jaMostrados.has(id));
+      if (quero.length) h += `<h4>Quero ir</h4><div class="bandeiras">${quero.map(card).join('')}</div>`;
+      return h || '<p>Nenhum país visitado ainda.</p>';
+    }
+    return `<div class="bandeiras">${ord(paisesVis).map(card).join('')}</div>
+      ${paisesQuero.size ? `<h4>Quero ir</h4><div class="bandeiras">${ord(paisesQuero).map(card).join('')}</div>` : ''}`;
+  };
+  // capitais brasileiras (bandeira municipal da Wikidata)
+  const capVisitadas = new Set(S.lugares.filter(l => l.tipo === 'cidade' && l.ref_externa?.startsWith('ibge:') && visitado(l.id, vis)).map(l => l.ref_externa.slice(5)).filter(c => CAPITAIS.includes(c)));
+  const htmlCapitais = () => {
+    const mun = S.munPorCod;
+    const lista = CAPITAIS.filter(c => albumCompleto || capVisitadas.has(c))
+      .map(c => ({ c, nome: mun?.get(c)?.nome || '', uf: mun?.get(c)?.uf || '' }))
+      .sort((a, b) => capVisitadas.has(b.c) - capVisitadas.has(a.c) || a.nome.localeCompare(b.nome, 'pt-BR'));
+    return `<div class="grupo-band"><span>🇧🇷 Capitais do Brasil</span><span>${capVisitadas.size} de 27</span></div>
+      <div class="bandeiras">${lista.map(({ c, nome, uf }) => `<button class="band-card estado${capVisitadas.has(c) ? '' : ' falta'}" data-cap="${c}">${imgBand(arquivos['ibge:' + c], '🏙️')}<small>${esc(nome)}${uf ? ' · ' + uf : ''}</small></button>`).join('') || '<p>Nenhuma capital ainda.</p>'}</div>`;
+  };
+  await carregaMunicipios().catch(() => {});
   abreModal(`
     <h3>Minhas bandeiras</h3>
     <div class="abas-band" role="tablist">
       <button role="tab" data-aba-band="paises">Países <b>${paisesVis.size}</b></button>
       <button role="tab" data-aba-band="estados">Estados <b>${estadosVis.size}</b></button>
+      <button role="tab" data-aba-band="capitais">Capitais <b>${capVisitadas.size}</b></button>
       <button role="tab" data-aba-band="mapa">Mapa</button>
     </div>
+    <div class="band-opcoes"></div>
     <div id="band-corpo"></div>
     <div class="acoes"><button class="btn" id="bd-fechar">Fechar</button></div>`, (m, fechar) => {
+    let abaAtual = abaInicial, mapaModo = 'paises';
+    const opcoes = m.querySelector('.band-opcoes');
     const mostra = aba => {
+      abaAtual = aba;
       m.querySelectorAll('[data-aba-band]').forEach(b => b.setAttribute('aria-selected', b.dataset.abaBand === aba));
-      m.querySelector('#band-corpo').innerHTML = aba === 'paises' ? htmlPaises() : aba === 'estados' ? htmlEstados() : '<canvas class="mapa-band"></canvas>';
-      if (aba === 'mapa') desenhaMapaBandeiras(m.querySelector('.mapa-band'));
+      opcoes.innerHTML = aba === 'mapa'
+        ? `<div class="seg"><button data-modo="paises" aria-pressed="${mapaModo === 'paises'}">Países</button><button data-modo="estados" aria-pressed="${mapaModo === 'estados'}">Estados ${bandeira(paisCasa)}</button></div>`
+        : `<label class="album"><input type="checkbox" ${albumCompleto ? 'checked' : ''}> Mostrar as que faltam</label>`;
+      const corpo = m.querySelector('#band-corpo');
+      corpo.innerHTML = aba === 'paises' ? htmlPaises() : aba === 'estados' ? htmlEstados() : aba === 'capitais' ? htmlCapitais() : '<canvas class="mapa-band"></canvas>';
+      if (aba === 'mapa') desenhaMapaBandeiras(m.querySelector('.mapa-band'), mapaModo, arquivos);
+      opcoes.querySelectorAll('[data-modo]').forEach(b => b.onclick = () => { mapaModo = b.dataset.modo; mostra('mapa'); });
+      const chk = opcoes.querySelector('.album input');
+      if (chk) chk.onchange = () => { albumCompleto = chk.checked; try { localStorage.setItem('poa-album', albumCompleto ? '1' : '0'); } catch {} mostra(abaAtual); };
       m.querySelectorAll('[data-pais]').forEach(b => b.onclick = () => { fechar(); const p = S.paisPorId.get(b.dataset.pais); S.aba = 'paises'; atualizaTudo(); if (p) mapa.fitBounds([[p.maior[1], p.maior[0]], [p.maior[3], p.maior[2]]]); });
       m.querySelectorAll('[data-estado]').forEach(b => b.onclick = () => { fechar(); const e = S.estadoPorId.get(b.dataset.estado); S.aba = 'estados'; atualizaTudo(); if (e) mapa.fitBounds([[e.bbox[1], e.bbox[0]], [e.bbox[3], e.bbox[2]]]); });
+      m.querySelectorAll('[data-cap]').forEach(b => b.onclick = () => { const x = S.munPorCod?.get(b.dataset.cap); if (!x) return; fechar(); S.aba = 'cidade'; atualizaTudo(); mapa.setView([x.lat, x.lon], 11); });
     };
     m.querySelectorAll('[data-aba-band]').forEach(b => b.onclick = () => mostra(b.dataset.abaBand));
     m.querySelector('#bd-fechar').onclick = fechar;
