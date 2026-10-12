@@ -11,3 +11,8 @@ Hospedagem: Vercel, importando este repositório (publica sozinho a cada push na
 No Brasil, "cidade" é só município oficial do IBGE (`municipios-br.json`, 5.570 municípios com código, UF e coordenadas). Povoados, bairros e regiões administrativas (ex.: Ceilândia, Gama) entram como "Outro lugar". Cidades salvas guardam `ref_externa = ibge:<código>`.
 
 Estados: primeiro nível que as pessoas reconhecem. Itália, França e Espanha por região; Reino Unido pelas 4 nações.
+
+## Bases prontas
+
+- **UNESCO**: tabela `viagem_unesco` no Supabase (só leitura), montada a partir do Wikidata (`P757`), com nome em português (rótulo pt/pt-br ou título da Wikipédia em português). Lugares marcados guardam `ref_externa = unesco:<id>`.
+- **Aeroportos**: `aeroportos.json`, do OurAirports (grandes e médios com voo comercial e código IATA), com nomes adaptados para o português. Lugares marcados guardam `ref_externa = iata:<código>`.

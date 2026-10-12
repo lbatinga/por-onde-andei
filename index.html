@@ -130,6 +130,13 @@ button { cursor: pointer; }
 .z6 .rot-mapa.pais div { opacity: .55; }
 .pino { background: none; border: 0; }
 .pino div { width: 22px; height: 22px; border-radius: 50%; background: var(--c); border: 2px solid #fff; display: grid; place-items: center; color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); translate: -50% -50%; }
+.pino.base div { background: #fff; color: #6b7c7d; border: 2px solid #9aa9aa; width: 20px; height: 20px; box-shadow: none; opacity: .9; }
+.pino.base div svg { width: 11px; height: 11px; }
+.item.base .txt b { font-weight: 500; }
+.ctl-local a { display: grid !important; place-items: center; color: #1a73e8 !important; }
+.ctl-local a svg { width: 18px; height: 18px; }
+.ctl-local.buscando a svg { animation: pisca 1s infinite; }
+@keyframes pisca { 50% { opacity: .3; } }
 .pino.cidade div { width: 24px; height: 24px; background: #fff; border: 3px solid var(--c); font-size: 15px; line-height: 1; }
 .pino div svg { width: 12px; height: 12px; }
 .pino div.band { overflow: hidden; }
@@ -410,6 +417,64 @@ async function alternaRotulo(lugarId, rotuloId) {
   atualizaTudo();
 }
 
+/* ================= Bases prontas: UNESCO e aeroportos ================= */
+// UNESCO: tabela viagem_unesco (Wikidata, nomes em português). Aeroportos: aeroportos.json (OurAirports, voos comerciais).
+let basePromessa = {};
+function carregaBase(tipo) {
+  if (tipo === 'unesco') return basePromessa.unesco ||= todos(() => supa.from('viagem_unesco').select('whs,nome,lat,lon,paises').order('whs'))
+    .then(rows => (S.baseUnesco = rows.map(r => ({ ref: 'unesco:' + r.whs, tipo: 'unesco', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.paises?.[0] || null, sub: (r.paises || []).map(nomePais).join(', ') }))))
+    .catch(e => { basePromessa.unesco = null; throw e; });
+  if (tipo === 'aeroporto') return basePromessa.aero ||= fetch('aeroportos.json').then(r => r.json())
+    .then(rows => (S.baseAero = rows.map(([iata, nome, lat, lon, cc, cidade, grande]) => ({ ref: 'iata:' + iata, tipo: 'aeroporto', nome, lat, lon, pais: cc, iata, grande, sub: `${iata} · ${[cidade, nomePais(cc)].filter(Boolean).join(', ')}` }))))
+    .catch(e => { basePromessa.aero = null; throw e; });
+  return Promise.resolve([]);
+}
+const basePorAba = aba => aba === 'unesco' ? (S.baseUnesco || []) : aba === 'transporte' ? (S.baseAero || []) : [];
+const lugarDaRef = ref => S.lugares.find(l => l.ref_externa === ref);
+function linhaBase(b) {
+  const marcas = S.rotulos.map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="false" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-base="${esc(b.ref)}" data-r="${r.id}">${CHECK}</button>`).join('');
+  return `<div class="item base"><span class="tipo">${ICONES[b.tipo]}</span>
+    <button class="txt" data-abrir-base="${esc(b.ref)}"><b>${esc(b.nome)}</b><small>${esc(b.sub || '')}</small></button>
+    <div class="marcas">${marcas}</div></div>`;
+}
+const acharBase = ref => (ref.startsWith('unesco:') ? S.baseUnesco : S.baseAero)?.find(b => b.ref === ref);
+// Marcar um item da base cria o lugar na hora, já com o rótulo
+async function marcaBase(ref, rotuloId) {
+  const b = acharBase(ref); if (!b) return;
+  const ja = lugarDaRef(ref); if (ja) return alternaRotulo(ja.id, rotuloId);
+  const loc = localizar(b.lat, b.lon, b.pais);
+  const { data, error } = await supa.from('viagem_lugares').insert({ tipo: b.tipo, nome: b.nome, lat: b.lat, lon: b.lon, pais: loc.pais, estado: loc.estado, ref_externa: ref }).select().single();
+  if (error) return toast('Não deu pra salvar: ' + error.message);
+  S.lugares.push(data);
+  const { error: e2 } = await supa.from('viagem_lugar_rotulos').insert({ lugar_id: data.id, rotulo_id: rotuloId });
+  if (e2) toast('Lugar salvo, mas o rótulo falhou: ' + e2.message); else S.lr.set(data.id, new Map([[rotuloId, null]]));
+  atualizaTudo();
+}
+function abreBase(ref) {
+  const b = acharBase(ref); if (!b) return;
+  const ja = lugarDaRef(ref); if (ja) return abreLugar(ja.id);
+  mapa.setView([b.lat, b.lon], Math.max(mapa.getZoom(), 10));
+  novoLugar({ lat: b.lat, lon: b.lon, tipo: b.tipo, nome: b.nome, pais: b.pais, ref_externa: ref });
+}
+// Pinos cinza dos itens da base (só na aba certa e de perto o bastante)
+let camadaBase;
+function desenhaBase() {
+  if (!camadaBase) return;
+  camadaBase.clearLayers();
+  const base = basePorAba(S.aba); if (!base.length) return;
+  const z = mapa.getZoom(); if (z < (S.aba === 'unesco' ? 4 : 5)) return;
+  const bb = mapa.getBounds().pad(0.05); let n = 0;
+  for (const b of base) {
+    if (n > 400) break;
+    if (!bb.contains([b.lat, b.lon]) || lugarDaRef(b.ref)) continue;
+    if (S.aba === 'transporte' && z < 7 && !b.grande) continue;
+    n++;
+    const m = L.marker([b.lat, b.lon], { icon: L.divIcon({ className: `pino base ${b.tipo}`, html: `<div>${ICONES[b.tipo]}</div>`, iconSize: [0, 0] }), title: b.nome });
+    m.on('click', () => abreBase(b.ref));
+    camadaBase.addLayer(m);
+  }
+}
+
 /* ================= Mapa ================= */
 let mapa, camadaPaises, camadaEstados, camadaPinos, camadaRotPaises, camadaRotEstados, fundo;
 function corToken(nome) { return getComputedStyle(document.documentElement).getPropertyValue(nome).trim(); }
@@ -442,6 +507,38 @@ async function colocaFundo() {
     fundo = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · Natural Earth' }).addTo(mapa);
   }
 }
+// Botão "onde estou": centraliza o mapa na posição do aparelho e mostra um ponto azul
+let pontoEuAqui;
+function criaBotaoLocalizar() {
+  const C = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const div = L.DomUtil.create('div', 'leaflet-bar ctl-local');
+      div.innerHTML = '<a href="#" role="button" title="Ir para onde estou" aria-label="Ir para onde estou"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3 3 10.5l7.5 2.9L13.4 21z"/></svg></a>';
+      L.DomEvent.disableClickPropagation(div);
+      div.querySelector('a').onclick = ev => { ev.preventDefault(); irParaMim(div); };
+      return div;
+    },
+  });
+  return new C();
+}
+function irParaMim(div) {
+  if (!navigator.geolocation) return toast('Este aparelho não informa a localização');
+  div.classList.add('buscando');
+  navigator.geolocation.getCurrentPosition(p => {
+    div.classList.remove('buscando');
+    const ll = [p.coords.latitude, p.coords.longitude];
+    if (pontoEuAqui) pontoEuAqui.remove();
+    pontoEuAqui = L.layerGroup([
+      L.circle(ll, { radius: Math.min(p.coords.accuracy, 2000), color: '#1a73e8', weight: 1, fillOpacity: 0.12, interactive: false }),
+      L.circleMarker(ll, { radius: 7, color: '#fff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false }),
+    ]).addTo(mapa);
+    mapa.setView(ll, Math.max(mapa.getZoom(), 13));
+  }, err => {
+    div.classList.remove('buscando');
+    toast(err.code === 1 ? 'Libere a localização para o app nas permissões do navegador' : 'Não consegui pegar sua localização agora', 4000);
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+}
 function iniciaMapa() {
   mapa = L.map('mapa', { preferCanvas: true, zoomControl: true, worldCopyJump: true, minZoom: 2, attributionControl: true })
     .setView([-12, -48], 4);
@@ -450,7 +547,9 @@ function iniciaMapa() {
 
   camadaPaises = L.geoJSON(S.fcPaises, { style: estiloPais, interactive: false }).addTo(mapa);
   camadaEstados = L.geoJSON(S.fcEstados, { style: estiloEstado, interactive: false });
+  camadaBase = L.layerGroup().addTo(mapa);
   camadaPinos = L.layerGroup().addTo(mapa);
+  L.control.localizar = criaBotaoLocalizar(); L.control.localizar.addTo(mapa);
 
   const ajustaZoom = () => {
     const z = mapa.getZoom(), el = mapa.getContainer();
@@ -523,7 +622,7 @@ function atualizaTudo() {
   ];
   $('#contadores').innerHTML = itens.map(([k, v, t]) =>
     `<button class="contador" data-aba="${k}" aria-pressed="${S.aba === k}"><b>${v}</b><span>${t}</span></button>`).join('');
-  renderLista();
+  renderLista(); desenhaBase();
 }
 function linhaLugar(l) {
   const m = rotulosDe(l.id);
@@ -582,14 +681,26 @@ function renderLista() {
       }
     }
     if (html) html = avisoMapa(cont.size, totalK.size) + html;
-    else if (totalK.size) html = avisoMapa(0, totalK.size) + '<div class="vazio-lista"><b>Nada nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
+    else if (totalK.size) html = avisoMapa(0, totalK.size) + '<div class="vazio-lista"><b>Nenhum marcado nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     if (!html) html = `<div class="vazio-lista"><b>Nenhum ${aba === 'paises' ? 'país' : 'estado'} ainda</b>Marque lugares como “${esc(S.rotulos.find(r => r.conta_como_visita)?.nome || 'Estive')}” e eles aparecem aqui.</div>`;
   } else {
     const tipos = aba === 'transporte' ? ['aeroporto', 'porto'] : [aba];
     const todos = S.lugares.filter(l => tipos.includes(l.tipo) && (!f || norm(l.nome + ' ' + nomeEstado(l.estado) + ' ' + nomePais(l.pais)).includes(f)));
     const ls = todos.filter(visivel).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     html = avisoMapa(ls.length, todos.length) + ls.map(linhaLugar).join('');
-    if (!ls.length && todos.length) html += '<div class="vazio-lista"><b>Nada nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
+    // itens da base ainda não marcados, na parte do mapa que está na tela
+    const base = basePorAba(aba);
+    if (base.length) {
+      const z = mapa ? mapa.getZoom() : 2;
+      const outros = base.filter(b => !lugarDaRef(b.ref) && visivel(b) && (!f || norm(b.nome + ' ' + b.sub).includes(f)) && (aba !== 'transporte' || b.grande || z >= 6 || f));
+      outros.sort((a, b) => (b.grande || 0) - (a.grande || 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
+      if (outros.length) html += `<div class="grupo"><span>${aba === 'unesco' ? 'Outros patrimônios nesta área' : 'Outros aeroportos nesta área'}</span><span>${outros.length}</span></div>`
+        + outros.slice(0, 150).map(linhaBase).join('')
+        + (outros.length > 150 ? `<div class="vazio-lista">Mais ${outros.length - 150}. Aproxime o mapa ou filtre pelo nome.</div>` : '');
+    } else if (aba === 'unesco' || aba === 'transporte') {
+      carregaBase(aba === 'unesco' ? 'unesco' : 'aeroporto').then(() => { renderLista(); desenhaBase(); }).catch(() => {});
+    }
+    if (!ls.length && todos.length) html += '<div class="vazio-lista"><b>Nenhum marcado nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     if (!html) html = f ? `<div class="vazio-lista"><b>Nada encontrado</b>Nenhum item com “${esc(S.filtro)}”.</div>`
       : `<div class="vazio-lista"><b>Nenhum item aqui ainda</b>Use a busca lá em cima, toque em “+ Lugar” ou segure o dedo no mapa para adicionar. Se tem dados do Places Been, use Menu › Importar.</div>`;
   }
@@ -903,20 +1014,20 @@ const CORRECOES = [
   { em: /historic cent|national park|world heritage|unesco/i, tipo: 'unesco' },
 ];
 const NOMES_PT = {
-  'guarulhos governador andre franco montoro international airport': ['Aeroporto Internacional de Guarulhos (GRU)', 'GRU'],
-  'presidente juscelino kubistschek international airport': ['Aeroporto Internacional de Brasília (BSB)', 'BSB'],
-  'presidente juscelino kubitschek international airport': ['Aeroporto Internacional de Brasília (BSB)', 'BSB'],
-  'tancredo neves international airport': ['Aeroporto Internacional de Confins (CNF)', 'CNF'],
-  'afonso pena airport': ['Aeroporto Internacional Afonso Pena (CWB)', 'CWB'],
-  'zumbi dos palmares airport': ['Aeroporto Internacional Zumbi dos Palmares (MCZ)', 'MCZ'],
-  'jorge newbery airpark': ['Aeroparque Jorge Newbery (AEP)', 'AEP'],
-  'historic centre of the town of olinda': ['Centro Histórico de Olinda', null],
+  'guarulhos governador andre franco montoro international airport': ['Aeroporto Internacional de Guarulhos (GRU)', 'iata:GRU'],
+  'presidente juscelino kubistschek international airport': ['Aeroporto Internacional de Brasília (BSB)', 'iata:BSB'],
+  'presidente juscelino kubitschek international airport': ['Aeroporto Internacional de Brasília (BSB)', 'iata:BSB'],
+  'tancredo neves international airport': ['Aeroporto Internacional de Confins (CNF)', 'iata:CNF'],
+  'afonso pena airport': ['Aeroporto Internacional Afonso Pena (CWB)', 'iata:CWB'],
+  'zumbi dos palmares airport': ['Aeroporto Internacional Zumbi dos Palmares (MCZ)', 'iata:MCZ'],
+  'jorge newbery airpark': ['Aeroparque Jorge Newbery (AEP)', 'iata:AEP'],
+  'historic centre of the town of olinda': ['Centro Histórico de Olinda', 'unesco:189'],
   'la boca': ['La Boca (Caminito)', null, 'atracao'],
 };
 // Não são municípios (povoado / região administrativa): ficam fora
 const IGNORAR = ['porto da rua', 'gama'];
 // No Places Been, "Brasilia" sem acento nesse ponto é o patrimônio da UNESCO (Plano Piloto)
-const ESPECIAIS = [{ nome: 'brasilia', lat: -15.78333, lon: -47.9, vira: ['Brasília (Plano Piloto)', 'unesco'] }];
+const ESPECIAIS = [{ nome: 'brasilia', lat: -15.78333, lon: -47.9, vira: ['Plano Piloto de Brasília', 'unesco', 'unesco:445'] }];
 const PORTOS_EXTRAS = [
   { tipo: 'porto', nome: 'Porto de Maceió', lat: -9.6807, lon: -35.7268, pais: 'BR' },
   { tipo: 'porto', nome: 'Porto de Buenos Aires', lat: -34.5847, lon: -58.3699, pais: 'AR' },
@@ -941,7 +1052,7 @@ function preparaImportacao(linhas, incluirPortos) {
     for (const c of CORRECOES) if (c.em.test(nome)) tipo = c.tipo;
     const fix = NOMES_PT[norm(nome)];
     if (fix) { if (fix[0] !== nome) notas.push(`${nome} → ${fix[0]}`); nome = fix[0]; ref = fix[1]; if (fix[2]) tipo = fix[2]; }
-    for (const e of ESPECIAIS) if (norm(b.nomeOrig) === e.nome && distKm(b.lat, b.lon, e.lat, e.lon) < 1) { nome = e.vira[0]; tipo = e.vira[1]; notas.push(`${b.nomeOrig} (ponto da UNESCO) → ${nome}, patrimônio da UNESCO`); }
+    for (const e of ESPECIAIS) if (norm(b.nomeOrig) === e.nome && distKm(b.lat, b.lon, e.lat, e.lon) < 1) { nome = e.vira[0]; tipo = e.vira[1]; ref = e.vira[2] || ref; notas.push(`${b.nomeOrig} (ponto da UNESCO) → ${nome}, patrimônio da UNESCO`); }
     novos.push({ ...b, tipo, nome, ref });
   }
   if (incluirPortos) PORTOS_EXTRAS.forEach(p => novos.push({ ...p, nomeOrig: p.nome, status: ['been'], ref: null }));
@@ -1096,13 +1207,15 @@ async function entrar(user) {
   const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1));
 
   $('#contadores').addEventListener('click', e => { const b = e.target.closest('.contador'); if (!b) return; S.aba = b.dataset.aba; S.filtro = ''; $('#filtro').value = ''; atualizaTudo(); });
-  let tLista; mapa.on('moveend', () => { clearTimeout(tLista); tLista = setTimeout(renderLista, 120); });
+  let tLista; mapa.on('moveend', () => { clearTimeout(tLista); tLista = setTimeout(() => { renderLista(); desenhaBase(); }, 120); });
   $('#lista').addEventListener('click', e => {
     if (e.target.closest('[data-ver-todos]')) {
       const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); else mapa.setView([0, 0], 2);
       return;
     }
-    const mk = e.target.closest('.marca'); if (mk) return alternaRotulo(mk.dataset.l, mk.dataset.r);
+    const mk = e.target.closest('.marca');
+    if (mk) return mk.dataset.base ? marcaBase(mk.dataset.base, mk.dataset.r) : alternaRotulo(mk.dataset.l, mk.dataset.r);
+    const abb = e.target.closest('[data-abrir-base]'); if (abb) return abreBase(abb.dataset.abrirBase);
     const ab = e.target.closest('[data-abrir]'); if (ab) return abreLugar(ab.dataset.abrir);
     const zp = e.target.closest('[data-zoom-pais]'); if (zp) { const p = S.paisPorId.get(zp.dataset.zoomPais); if (p) mapa.fitBounds([[p.maior[1], p.maior[0]], [p.maior[3], p.maior[2]]]); return; }
     const ze = e.target.closest('[data-zoom-estado]'); if (ze) { const p = S.estadoPorId.get(ze.dataset.zoomEstado); if (p) mapa.fitBounds([[p.bbox[1], p.bbox[0]], [p.bbox[3], p.bbox[2]]]); }
