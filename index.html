@@ -280,6 +280,7 @@ button { cursor: pointer; }
 .chip-lugar i { font-style: normal; font-weight: 700; color: var(--accent); margin-right: 2px; }
 .num-roteiro { background: none; border: 0; }
 .num-roteiro div { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font: 700 12px/24px var(--f-body); text-align: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); translate: -50% -50%; }
+.sinal { background: var(--want); color: #1b1b1b; font-size: .72rem; font-weight: 700; border-radius: 99px; padding: 3px 9px; white-space: nowrap; }
 .acoes { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 10px 16px; font-weight: 600; }
 .btn.principal { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
@@ -337,6 +338,7 @@ button { cursor: pointer; }
 <div id="app" hidden>
   <header class="topo">
     <h1>Por Onde <span>Andei</span></h1>
+    <span id="sinal" class="sinal" hidden></span>
     <div class="busca">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input id="busca" type="search" placeholder="Buscar cidade, aeroporto, atração…" autocomplete="off" enterkeyhint="search">
@@ -500,6 +502,67 @@ async function baixaGeo() {
 const nomePais = id => S.paisPorId.get(id)?.nome || id || '';
 const nomeEstado = id => S.estadoPorId.get(id)?.nome || '';
 
+/* ================= Sem internet ================= */
+// Cópia local dos dados (para abrir sem conexão) e fila de alterações feitas offline,
+// enviada sozinha quando a internet volta. Ids de lugares novos são gerados no aparelho.
+const CHAVE_COPIA = 'poa-copia-v1', CHAVE_FILA = 'poa-fila-v1';
+const novoId = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+function salvaCopia() {
+  if (S.publico || !S.user) return;
+  try {
+    localStorage.setItem(CHAVE_COPIA, JSON.stringify({ user: { id: S.user.id, email: S.user.email }, em: Date.now(), rotulos: S.rotulos, lugares: S.lugares,
+      lr: [...S.lr].map(([l, m]) => [l, [...m.keys()]]), visitas: S.visitas || [], viagens: S.viagens || [], paradas: S.paradas || [] }));
+  } catch {}
+}
+let tCopia; const agendaCopia = () => { clearTimeout(tCopia); tCopia = setTimeout(salvaCopia, 1500); };
+function leCopia() { try { return JSON.parse(localStorage.getItem(CHAVE_COPIA)); } catch { return null; } }
+function aplicaCopia(c) {
+  S.rotulos = c.rotulos || []; S.lugares = c.lugares || []; S.visitas = c.visitas || []; S.viagens = c.viagens || []; S.paradas = c.paradas || [];
+  S.lr = new Map((c.lr || []).map(([l, rs]) => [l, new Map(rs.map(r => [r, null]))]));
+}
+let fila = (() => { try { return JSON.parse(localStorage.getItem(CHAVE_FILA)) || []; } catch { return []; } })();
+function salvaFila() { try { localStorage.setItem(CHAVE_FILA, JSON.stringify(fila)); } catch {} atualizaSinal(); }
+const erroDeRede = e => !e || /fetch|network|load failed|rede|timeout/i.test(e.message || String(e));
+function executa(op) {
+  const q = supa.from(op.tabela);
+  if (op.tipo === 'inserir') return q.insert(op.linha);
+  if (op.tipo === 'atualizar') return q.update(op.valores).match(op.filtro);
+  if (op.tipo === 'apagar') return q.delete().match(op.filtro);
+  return Promise.resolve({});
+}
+// grava agora; sem conexão, guarda na fila
+async function grava(op) {
+  if (navigator.onLine) {
+    try { const { error } = await executa(op); if (!error) return {}; if (!erroDeRede(error)) return { error }; }
+    catch (e) { if (!erroDeRede(e)) return { error: e }; }
+  }
+  fila.push(op); salvaFila(); return { naFila: true };
+}
+let sincronizando = false;
+async function sincroniza() {
+  if (sincronizando || !fila.length || !navigator.onLine) return;
+  sincronizando = true; atualizaSinal();
+  try {
+    let enviados = 0;
+    while (fila.length) {
+      let res; try { res = await executa(fila[0]); } catch (e) { res = { error: e }; }
+      if (res?.error && erroDeRede(res.error)) break;
+      // 23505 = já existia; outro erro descarta a alteração para a fila não travar
+      if (res?.error && res.error.code !== '23505') toast('Uma alteração feita sem internet não pôde ser salva: ' + res.error.message, 5000);
+      fila.shift(); salvaFila(); enviados++;
+    }
+    if (!fila.length && enviados) toast(enviados === 1 ? 'A alteração feita sem internet foi salva' : `${enviados} alterações feitas sem internet foram salvas`);
+  } finally { sincronizando = false; atualizaSinal(); }
+}
+function atualizaSinal() {
+  const el = document.getElementById('sinal'); if (!el) return;
+  const off = !navigator.onLine;
+  el.hidden = !off && !fila.length;
+  el.textContent = off ? (fila.length ? `Sem internet · ${fila.length} pendente${fila.length > 1 ? 's' : ''}` : 'Sem internet') : `Enviando ${fila.length}…`;
+}
+window.addEventListener('online', () => { atualizaSinal(); sincroniza(); });
+window.addEventListener('offline', atualizaSinal);
+
 /* ================= Dados ================= */
 async function todos(montar) {
   let out = [], de = 0;
@@ -524,6 +587,7 @@ async function carregaDados() {
   S.paradas = await todos(() => supa.from('viagem_paradas').select('id,viagem_id,lugar_id,ordem')).catch(() => []);
   S.lr = new Map();
   for (const x of lr) { if (!S.lr.has(x.lugar_id)) S.lr.set(x.lugar_id, new Map()); S.lr.get(x.lugar_id).set(x.rotulo_id, x.data); }
+  salvaCopia();
 }
 const rotulosDe = id => S.lr.get(id) || new Map();
 const idsVisita = () => new Set(S.rotulos.filter(r => r.conta_como_visita).map(r => r.id));
@@ -536,13 +600,13 @@ function corDoLugar(lugarId) {
 async function alternaRotulo(lugarId, rotuloId) {
   const m = rotulosDe(lugarId); const tinha = m.has(rotuloId);
   if (tinha) {
-    const { error } = await supa.from('viagem_lugar_rotulos').delete().eq('lugar_id', lugarId).eq('rotulo_id', rotuloId);
+    const { error } = await grava({ tipo: 'apagar', tabela: 'viagem_lugar_rotulos', filtro: { lugar_id: lugarId, rotulo_id: rotuloId } });
     if (error) return toast('Não deu pra salvar: ' + error.message);
     m.delete(rotuloId); if (!m.size) S.lr.delete(lugarId);
     const nomeL = S.lugares.find(x => x.id === lugarId)?.nome || 'lugar', nomeR = S.rotulos.find(r => r.id === rotuloId)?.nome || 'rótulo';
     toast(`${nomeR} tirado de ${nomeL}`, 5000, { rotulo: 'Desfazer', fn: () => alternaRotulo(lugarId, rotuloId) });
   } else {
-    const { error } = await supa.from('viagem_lugar_rotulos').insert({ lugar_id: lugarId, rotulo_id: rotuloId });
+    const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugar_rotulos', linha: { lugar_id: lugarId, rotulo_id: rotuloId } });
     if (error) return toast('Não deu pra salvar: ' + error.message);
     m.set(rotuloId, null); S.lr.set(lugarId, m);
   }
@@ -601,10 +665,11 @@ async function marcaBase(ref, rotuloId) {
   const b = acharBase(ref); if (!b) return;
   const ja = lugarDaRef(ref); if (ja) return alternaRotulo(ja.id, rotuloId);
   const loc = localizar(b.lat, b.lon, b.pais);
-  const { data, error } = await supa.from('viagem_lugares').insert({ tipo: b.tipo, nome: b.nome, lat: b.lat, lon: b.lon, pais: loc.pais, estado: loc.estado, ref_externa: ref }).select().single();
+  const data = { id: novoId(), tipo: b.tipo, nome: b.nome, lat: b.lat, lon: b.lon, pais: loc.pais, estado: loc.estado, ref_externa: ref, notas: null };
+  const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugares', linha: data });
   if (error) return toast('Não deu pra salvar: ' + error.message);
   S.lugares.push(data);
-  const { error: e2 } = await supa.from('viagem_lugar_rotulos').insert({ lugar_id: data.id, rotulo_id: rotuloId });
+  const { error: e2 } = await grava({ tipo: 'inserir', tabela: 'viagem_lugar_rotulos', linha: { lugar_id: data.id, rotulo_id: rotuloId } });
   if (e2) toast('Lugar salvo, mas o rótulo falhou: ' + e2.message); else S.lr.set(data.id, new Map([[rotuloId, null]]));
   atualizaTudo();
 }
@@ -797,6 +862,7 @@ function calcula() {
   return cont;
 }
 function atualizaTudo() {
+  agendaCopia();
   const c = calcula();
   if (camadaPaises) { ajustaCamadaEstados(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); desenhaPinos(); }
   document.querySelectorAll('.rot-mapa div[data-pais]').forEach(d => d.parentElement.classList.toggle('visitado', paisesVis.has(d.dataset.pais)));
@@ -1004,9 +1070,10 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
       visitas.push({ data, precisao: p }); campoData.value = ''; desenhaVisitas();
     };
     async function gravaVisitas(lugarId) {
-      if (removidas.length) { const { error } = await supa.from('viagem_visitas').delete().in('id', removidas); if (error) throw error; S.visitas = S.visitas.filter(v => !removidas.includes(v.id)); }
-      const novas = visitas.filter(v => !v.id).map(v => ({ lugar_id: lugarId, data: v.data, precisao: v.precisao }));
-      if (novas.length) { const { data, error } = await supa.from('viagem_visitas').insert(novas).select('id,lugar_id,data,precisao,nota'); if (error) throw error; S.visitas.push(...data); }
+      for (const vid of removidas) { const { error } = await grava({ tipo: 'apagar', tabela: 'viagem_visitas', filtro: { id: vid } }); if (error) throw error; }
+      S.visitas = S.visitas.filter(v => !removidas.includes(v.id));
+      const novas = visitas.filter(v => !v.id).map(v => ({ id: novoId(), lugar_id: lugarId, data: v.data, precisao: v.precisao }));
+      if (novas.length) { const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_visitas', linha: novas }); if (error) throw error; S.visitas.push(...novas.map(v => ({ ...v, nota: null, viagem_id: null }))); }
     }
     const aviso = m.querySelector('#f-aviso'), campoNome = m.querySelector('#f-nome'), campoTipo = m.querySelector('#f-tipo');
     m.querySelectorAll('#f-chips .chip').forEach(b => b.onclick = () => { const r = b.dataset.r; sel.has(r) ? sel.delete(r) : sel.add(r); b.setAttribute('aria-pressed', sel.has(r)); });
@@ -1059,8 +1126,8 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
 async function salvaRotulosDoLugar(id, sel) {
   const atual = rotulosDe(id);
   const tirar = [...atual.keys()].filter(r => !sel.has(r)), por = [...sel].filter(r => !atual.has(r));
-  if (tirar.length) { const { error } = await supa.from('viagem_lugar_rotulos').delete().eq('lugar_id', id).in('rotulo_id', tirar); if (error) throw error; }
-  if (por.length) { const { error } = await supa.from('viagem_lugar_rotulos').insert(por.map(r => ({ lugar_id: id, rotulo_id: r }))); if (error) throw error; }
+  for (const r of tirar) { const { error } = await grava({ tipo: 'apagar', tabela: 'viagem_lugar_rotulos', filtro: { lugar_id: id, rotulo_id: r } }); if (error) throw error; }
+  if (por.length) { const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugar_rotulos', linha: por.map(r => ({ lugar_id: id, rotulo_id: r })) }); if (error) throw error; }
   const m = new Map(); sel.forEach(r => m.set(r, atual.get(r) ?? null));
   if (m.size) S.lr.set(id, m); else S.lr.delete(id);
 }
@@ -1069,8 +1136,8 @@ function novoLugar(dados, sugestoes) {
   formLugar({
     titulo: 'Novo lugar', l: dados, rotSel: new Set(padrao ? [padrao.id] : []), sugestoes,
     aoSalvar: async (v, sel) => {
-      const reg = { tipo: v.tipo, nome: v.nome, notas: v.notas, lat: dados.lat, lon: dados.lon, pais: v.pais, estado: v.estado, ref_externa: v.ref_externa ?? dados.ref_externa ?? null };
-      const { data, error } = await supa.from('viagem_lugares').insert(reg).select().single();
+      const data = { id: novoId(), tipo: v.tipo, nome: v.nome, notas: v.notas, lat: dados.lat, lon: dados.lon, pais: v.pais, estado: v.estado, ref_externa: v.ref_externa ?? dados.ref_externa ?? null };
+      const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugares', linha: data });
       if (error) { toast('Erro ao salvar: ' + error.message); return false; }
       S.lugares.push(data);
       try { await salvaRotulosDoLugar(data.id, sel); } catch (e) { toast('Lugar salvo, mas os rótulos falharam: ' + e.message); }
@@ -1117,7 +1184,7 @@ function abreLugar(id) {
     titulo: l.nome, l, rotSel: new Set(rotulosDe(id).keys()),
     aoSalvar: async (v, sel) => {
       const mud = { nome: v.nome, tipo: v.tipo, notas: v.notas, pais: v.pais, estado: v.estado, ref_externa: v.ref_externa };
-      const { error } = await supa.from('viagem_lugares').update(mud).eq('id', id);
+      const { error } = await grava({ tipo: 'atualizar', tabela: 'viagem_lugares', valores: mud, filtro: { id } });
       if (error) { toast('Erro ao salvar: ' + error.message); return false; }
       Object.assign(l, mud);
       try { await salvaRotulosDoLugar(id, sel); } catch (e) { toast('Erro nos rótulos: ' + e.message); }
@@ -1526,6 +1593,14 @@ function resumoLugar(l, marcador) {
 // Uma viagem tem um roteiro ordenado (viagem_paradas), que pode repetir lugares,
 // e um mês de início (viagem_viagens.inicio). As visitas do período ficam ligadas a ela.
 const nomeMes = ym => `${MESES[+ym.slice(5, 7) - 1]}/${ym.slice(0, 4)}`;
+// distância do roteiro em linha reta, somando trecho a trecho
+function kmViagem(id) {
+  const porLugar = new Map(S.lugares.map(l => [l.id, l]));
+  const ps = paradasDe(id).map(p => porLugar.get(p.lugar_id)).filter(Boolean);
+  let km = 0; for (let i = 1; i < ps.length; i++) km += distKm(ps[i - 1].lat, ps[i - 1].lon, ps[i].lat, ps[i].lon);
+  return Math.round(km);
+}
+const fmtKm = km => `${km.toLocaleString('pt-BR')} km`;
 const paradasDe = id => (S.paradas || []).filter(p => p.viagem_id === id).sort((a, b) => a.ordem - b.ordem);
 function periodoViagem(vg) {
   const ds = (S.visitas || []).filter(v => v.viagem_id === vg.id).map(v => v.data).concat(vg.inicio ? [vg.inicio] : []).sort();
@@ -1545,7 +1620,7 @@ function abreViagens() {
     const sug = sugestoesViagem();
     const vgs = [...(S.viagens || [])].sort((a, b) => inicioViagem(b).localeCompare(inicioViagem(a)));
     m.querySelector('#vg-corpo').innerHTML = `
-      ${vgs.length ? vgs.map(vg => { const ps = paradasDe(vg.id); const paises = new Set(ps.map(p => porLugar.get(p.lugar_id)?.pais).filter(Boolean)); return `<button class="viagem-card" data-vg="${vg.id}"><b>${esc(vg.nome)}</b><small>${esc(periodoViagem(vg))} · ${ps.length} ${ps.length === 1 ? 'parada' : 'paradas'} · ${[...paises].map(bandeira).join(' ')}</small></button>`; }).join('') : '<p>Nenhuma viagem ainda. Crie uma a partir das sugestões abaixo ou do zero.</p>'}
+      ${vgs.length ? vgs.map(vg => { const ps = paradasDe(vg.id); const paises = new Set(ps.map(p => porLugar.get(p.lugar_id)?.pais).filter(Boolean)); return `<button class="viagem-card" data-vg="${vg.id}"><b>${esc(vg.nome)}</b><small>${esc(periodoViagem(vg))} · ${ps.length} ${ps.length === 1 ? 'parada' : 'paradas'} · ${fmtKm(kmViagem(vg.id))} · ${[...paises].map(bandeira).join(' ')}</small></button>`; }).join('') : '<p>Nenhuma viagem ainda. Crie uma a partir das sugestões abaixo ou do zero.</p>'}
       ${sug.length ? `<h4>Sugestões</h4><p class="meta">Meses com vários lugares visitados que ainda não estão numa viagem.</p>${sug.map(([ym, vs]) => `<div class="sugestao"><span><b>${esc(nomeMes(ym))}</b> · ${vs.length} lugares<small>${esc(vs.slice(0, 5).map(v => porLugar.get(v.lugar_id)?.nome).filter(Boolean).join(', '))}${vs.length > 5 ? '…' : ''}</small></span><button class="btn" data-sug="${ym}">Criar</button></div>`).join('')}` : ''}`;
     m.querySelectorAll('[data-vg]').forEach(b => b.onclick = () => editaViagem(S.viagens.find(x => x.id === b.dataset.vg), null, () => desenhar(m)));
     m.querySelectorAll('[data-sug]').forEach(b => b.onclick = () => editaViagem(null, b.dataset.sug, () => desenhar(m)));
@@ -1574,6 +1649,7 @@ function editaViagem(vg, mesSugerido, aoSalvar) {
     </div>
     <div class="campo"><span class="rotulo-campo">Roteiro, na ordem em que você foi</span>
       <ol id="vg-roteiro" class="roteiro"></ol>
+      <div class="meta" id="vg-km"></div>
       <div class="add-parada">
         <input id="vg-busca" type="search" placeholder="+ Adicionar parada (nome do lugar)" autocomplete="off">
         <div id="vg-achados" class="achados"></div>
@@ -1587,6 +1663,8 @@ function editaViagem(vg, mesSugerido, aoSalvar) {
         <span class="txt"><b>${esc(l.nome)}</b><small>${esc(nomeEstado(l.estado) || nomePais(l.pais))}</small></span>
         <span class="mover"><button type="button" data-sobe="${i}" aria-label="Subir" ${i ? '' : 'disabled'}>↑</button><button type="button" data-desce="${i}" aria-label="Descer" ${i < roteiro.length - 1 ? '' : 'disabled'}>↓</button><button type="button" data-tira="${i}" aria-label="Tirar">×</button></span></li>`; }).join('')
         : '<li class="meta">Nenhuma parada ainda. Use a busca abaixo.</li>';
+      let km = 0; for (let i = 1; i < roteiro.length; i++) { const a = porLugar.get(roteiro[i - 1]), b = porLugar.get(roteiro[i]); km += distKm(a.lat, a.lon, b.lat, b.lon); }
+      m.querySelector('#vg-km').textContent = roteiro.length > 1 ? `${fmtKm(Math.round(km))} em linha reta, somando os trechos` : '';
       lista.querySelectorAll('[data-sobe]').forEach(b => b.onclick = () => { const i = +b.dataset.sobe; [roteiro[i - 1], roteiro[i]] = [roteiro[i], roteiro[i - 1]]; desenharRoteiro(); });
       lista.querySelectorAll('[data-desce]').forEach(b => b.onclick = () => { const i = +b.dataset.desce; [roteiro[i + 1], roteiro[i]] = [roteiro[i], roteiro[i + 1]]; desenharRoteiro(); });
       lista.querySelectorAll('[data-tira]').forEach(b => b.onclick = () => { roteiro.splice(+b.dataset.tira, 1); desenharRoteiro(); });
@@ -1678,7 +1756,7 @@ function abreLinhaDoTempo() {
     if (it.tipo === 'viagem') {
       const ps = paradasDe(it.vg.id).filter(p => porLugar.has(p.lugar_id));
       const paises = new Set(ps.map(p => porLugar.get(p.lugar_id).pais).filter(Boolean));
-      html += `<div class="viagem-tl"><button class="viagem-topo" data-vg="${it.vg.id}"><b>${esc(it.vg.nome)}</b><small>${esc(periodoViagem(it.vg))} · ${ps.length} paradas ${[...paises].map(bandeira).join(' ')}</small></button>
+      html += `<div class="viagem-tl"><button class="viagem-topo" data-vg="${it.vg.id}"><b>${esc(it.vg.nome)}</b><small>${esc(periodoViagem(it.vg))} · ${ps.length} paradas · ${fmtKm(kmViagem(it.vg.id))} ${[...paises].map(bandeira).join(' ')}</small></button>
         <div class="viagem-lugares">${ps.map((p, i) => { const l = porLugar.get(p.lugar_id); return `<button class="chip-lugar" data-ir="${l.id}"><i>${i + 1}</i>${iconeDe(l)}${esc(l.nome)}</button>`; }).join('')}</div>
         <button class="link-btn" data-rota="${it.vg.id}">Ver roteiro no mapa</button></div>`;
     } else {
@@ -1741,6 +1819,11 @@ function abreEstatisticas() {
     <p class="meta">A área conta os estados e províncias por onde você passou.</p>
     <h4>Por continente</h4>
     ${[...conts].sort((a, b) => b[1][0] - a[1][0] || a[0].localeCompare(b[0])).map(([c, [v, t]]) => barra(c, v, t)).join('')}
+    ${(S.viagens || []).length ? `<h4>Viagens</h4><div class="tabela">
+      <span>Viagens registradas</span><b>${num(S.viagens.length)}</b>
+      <span>Distância percorrida (linha reta)</span><b>${fmtKm(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0))}</b>
+      ${(() => { const maior = [...S.viagens].sort((a, b) => kmViagem(b.id) - kmViagem(a.id))[0]; return maior ? `<span>Mais longa: ${esc(maior.nome)}</span><b>${fmtKm(kmViagem(maior.id))}</b>` : ''; })()}
+      <span>Voltas na Terra</span><b>${(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0) / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b></div>` : ''}
     <h4>Brasil</h4>
     ${barra('Estados', ufsBR, 27)}${barra('Municípios', munBR, S.mun?.length || 5570)}
     <h4>O que você já marcou</h4>
@@ -1973,9 +2056,10 @@ function abreMenu() {
     m.querySelector('#m-backup').onclick = () => { fechar(); abreBackup(); };
     m.querySelector('#m-imp').onclick = () => { fechar(); abreImportacao(); };
     m.querySelector('#m-tudo').onclick = () => { fechar(); const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); };
-    m.querySelector('#m-sair').onclick = async () => { await supa.auth.signOut(); location.reload(); };
+    m.querySelector('#m-sair').onclick = async () => { if (fila.length && !confirmaSaida()) return; try { localStorage.removeItem(CHAVE_COPIA); localStorage.removeItem(CHAVE_FILA); } catch {} await supa.auth.signOut(); location.reload(); };
   });
 }
+function confirmaSaida() { toast(`Há ${fila.length} alteração(ões) sem internet ainda não enviadas. Conecte-se antes de sair.`, 5000); return false; }
 function saiMira() { S.modoMira = false; $('#aviso-mira').hidden = true; document.body.classList.remove('mira'); }
 
 /* ================= Login ================= */
@@ -2020,10 +2104,21 @@ async function entrar(user) {
   if (iniciado) return; iniciado = true;
   S.user = user;
   $('#tela-login').hidden = true; $('#carregando').hidden = false;
+  await sincroniza().catch(() => {});
   try {
     await Promise.all([carregaGeo(), carregaDados()]);
-  } catch (e) { $('#carregando').textContent = 'Erro ao carregar: ' + e.message; iniciado = false; return; }
-  montaApp();
+  } catch (e) {
+    const c = leCopia();
+    if (c && c.user?.id === user.id && erroDeRede(e)) {
+      aplicaCopia(c);
+      try { await carregaGeo(); } catch (e2) { $('#carregando').textContent = 'Sem internet e sem os mapas guardados. Abra o app uma vez com internet.'; iniciado = false; return; }
+      montaApp(); atualizaSinal();
+      toast(`Sem internet: mostrando seus dados de ${new Date(c.em).toLocaleDateString('pt-BR')}`, 4000);
+      return;
+    }
+    $('#carregando').textContent = 'Erro ao carregar: ' + e.message; iniciado = false; return;
+  }
+  montaApp(); atualizaSinal();
 }
 
 function montaApp() {
@@ -2094,8 +2189,11 @@ async function entrarPublico(token) {
   });
   const tokenPublico = new URLSearchParams(location.search).get('v');
   if (tokenPublico) return entrarPublico(tokenPublico);
-  const { data } = await supa.auth.getSession();
-  if (data.session?.user) entrar(data.session.user); else telaLogin();
+  let sessao = null;
+  try { sessao = (await supa.auth.getSession()).data.session; } catch {}
+  if (sessao?.user) entrar(sessao.user);
+  else if (!navigator.onLine && leCopia()?.user) entrar(leCopia().user); // sem internet: abre com a última cópia
+  else telaLogin();
 })();
 </script>
 </body>
