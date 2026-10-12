@@ -561,31 +561,44 @@ function iniciaMapa() {
   const ajustaZoom = () => {
     const z = mapa.getZoom(), el = mapa.getContainer();
     el.className = el.className.replace(/\bz\d+\b/g, '').trim() + ' z' + Math.min(z, 9);
-    if (z >= 4) { if (!mapa.hasLayer(camadaEstados)) camadaEstados.addTo(mapa); }
-    else camadaEstados.remove();
+    ajustaCamadaEstados();
   };
   mapa.on('zoomend', () => { ajustaZoom(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); }); ajustaZoom();
 
   mapa.on('click', e => { if (S.modoMira) { saiMira(); novoLugarEm(e.latlng.lat, e.latlng.lng); } });
   mapa.on('contextmenu', e => novoLugarEm(e.latlng.lat, e.latlng.lng));
 }
+function ajustaCamadaEstados() {
+  if (!mapa || !camadaEstados) return;
+  if (mapa.getZoom() >= 4 || S.aba === 'estados') { if (!mapa.hasLayer(camadaEstados)) camadaEstados.addTo(mapa); }
+  else camadaEstados.remove();
+}
 let paisesVis = new Set(), paisesQuero = new Set(), estadosVis = new Set(), estadosQuero = new Set();
 function estiloPais(f) {
   const id = f.properties.id, v = paisesVis.has(id), q = !v && paisesQuero.has(id), z = mapa ? mapa.getZoom() : 3;
-  if ((!v && !q) || z >= 6) return { stroke: false, fill: false };
+  if (!v && !q) return { stroke: false, fill: false };
+  if (abaDeRegiao()) { const cor = v ? corToken('--visit') : corToken('--want'); return { stroke: true, fill: true, color: cor, weight: 1.5, opacity: 0.9, fillColor: cor, fillOpacity: S.aba === 'paises' ? 0.3 : 0.1 }; }
+  if (z >= 6) return { stroke: false, fill: false };
   const cor = v ? corToken('--visit') : corToken('--want');
   return { stroke: true, fill: true, color: cor, weight: 1.5, opacity: 0.9, fillColor: cor, fillOpacity: z >= 5 ? 0.12 : 0.22 };
 }
 function estiloEstado(f) {
   const id = f.properties.id, v = estadosVis.has(id), q = !v && estadosQuero.has(id), z = mapa ? mapa.getZoom() : 3;
-  if ((!v && !q) || z >= 9) return { stroke: false, fill: false };
+  if (!v && !q) return { stroke: false, fill: false };
+  if (S.aba === 'estados') { const cor = v ? corToken('--visit') : corToken('--want'); return { stroke: true, fill: true, color: cor, weight: 1.2, opacity: 0.9, fillColor: cor, fillOpacity: 0.35 }; }
+  if (S.aba === 'paises') return { stroke: false, fill: false };
+  if (z >= 9) return { stroke: false, fill: false };
   const cor = v ? corToken('--visit') : corToken('--want');
   return { stroke: true, fill: z < 7, color: cor, weight: z >= 7 ? 2 : 1, opacity: 0.85, fillColor: cor, fillOpacity: z >= 6 ? 0.12 : 0.28 };
 }
+// Cada aba mostra só os pinos do seu tipo; Países e Estados mostram só a pintura
+const tiposDaAba = aba => ({ cidade: ['cidade'], unesco: ['unesco'], transporte: ['aeroporto', 'porto'], atracao: ['atracao'], outro: ['outro'], paises: [], estados: [] })[aba] || Object.keys(TIPOS);
+const abaDeRegiao = () => S.aba === 'paises' || S.aba === 'estados';
 function desenhaPinos() {
   camadaPinos.clearLayers();
+  const tipos = tiposDaAba(S.aba);
   for (const l of S.lugares) {
-    if (!S.lr.has(l.id)) continue;
+    if (!S.lr.has(l.id) || !tipos.includes(l.tipo)) continue;
     const m = L.marker([l.lat, l.lon], {
       icon: L.divIcon({ className: `pino ${l.tipo}`, html: l.tipo === 'cidade'
         ? `<div class="band" style="--c:${corDoLugar(l.id)}">${bandeira(l.pais)}</div>`
@@ -617,7 +630,7 @@ function calcula() {
 }
 function atualizaTudo() {
   const c = calcula();
-  if (camadaPaises) { camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); desenhaPinos(); }
+  if (camadaPaises) { ajustaCamadaEstados(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); desenhaPinos(); }
   document.querySelectorAll('.rot-mapa div[data-pais]').forEach(d => d.parentElement.classList.toggle('visitado', paisesVis.has(d.dataset.pais)));
   const totalPaises = S.paises.length;
   const itens = [
