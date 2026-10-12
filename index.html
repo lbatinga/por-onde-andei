@@ -45,7 +45,16 @@ button { cursor: pointer; }
 [hidden] { display: none !important; }
 
 /* ---------- App shell ---------- */
-#app { height: 100%; display: grid; grid-template-rows: auto auto 1fr; }
+:root { --nav-h: 60px; }
+#app { height: 100%; display: grid; grid-template-rows: auto auto 1fr auto; }
+#btn-menu { display: none; }
+body.publico #btn-menu { display: grid; }
+.barra-nav { display: flex; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 1100; }
+.barra-nav button { flex: 1; border: 0; background: none; display: grid; justify-items: center; gap: 3px; padding: 8px 2px 7px; color: var(--muted); font: 600 .7rem var(--f-body); }
+.barra-nav svg { width: 22px; height: 22px; }
+.barra-nav button[aria-current="page"] { color: var(--primary); }
+.barra-nav button[aria-current="page"] svg { background: color-mix(in srgb, var(--visit) 18%, transparent); border-radius: 99px; padding: 2px 14px; box-sizing: content-box; }
+@media (prefers-color-scheme: dark) { .barra-nav button[aria-current="page"] { color: var(--visit); } }
 .topo { background: var(--primary); color: var(--on-primary); display: flex; align-items: center; gap: 8px;
   padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 8px; }
 .topo h1 { font: 800 1.2rem/1 var(--f-display); letter-spacing: -.01em; margin: 0 auto 0 4px; white-space: nowrap; }
@@ -69,18 +78,36 @@ button { cursor: pointer; }
 .aviso-mun { background: color-mix(in srgb, var(--want) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--want) 55%, transparent); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; font-size: .9rem; }
 .aviso-mun span { color: var(--muted); }
 
-.contadores { display: flex; gap: 2px; overflow-x: auto; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); padding-right: 28px; background: var(--surface); border-bottom: 1px solid var(--line); scrollbar-width: none; }
+.contadores { display: flex; gap: 2px; padding: 0 6px; overflow-x: auto; background: var(--surface); border-bottom: 1px solid var(--line); scrollbar-width: none; }
 .contadores::-webkit-scrollbar { display: none; }
-.contador { flex: 1 0 auto; border: 0; background: none; padding: 8px 12px; display: grid; justify-items: center; gap: 0; min-width: 76px; border-bottom: 2px solid transparent; }
-.contador b { font: 800 1.15rem/1.1 var(--f-display); font-variant-numeric: tabular-nums; }
+.contador { flex: 1 0 auto; border: 0; background: none; padding: 6px 8px; margin: 6px 0; display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; border-radius: 99px; color: var(--ink); }
+.contador svg { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.contador b { font: 800 1rem/1.1 var(--f-display); font-variant-numeric: tabular-nums; }
+.contador[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .contador[aria-pressed="true"] { background: var(--visit); color: #04201c; } :root:not([data-theme="light"]) .contador[aria-pressed="true"] svg { color: #04201c; } }
+.contador[aria-pressed="true"] svg, .contador[aria-pressed="true"] b small { color: var(--on-primary); opacity: .85; }
 .contador b small { font: 600 .75rem var(--f-body); color: var(--muted); }
 .contador span { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); white-space: nowrap; }
-.contador[aria-pressed="true"] { border-bottom-color: var(--accent); }
 
-.corpo { display: grid; grid-template-rows: minmax(0, 52fr) minmax(0, 48fr); grid-template-columns: minmax(0, 1fr); min-height: 0; min-width: 0; }
+
+.corpo { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); min-height: 0; min-width: 0; }
 #app { min-width: 0; overflow-x: hidden; }
 @media (min-width: 900px) { .corpo { grid-template-rows: none; grid-template-columns: minmax(0,1fr) 420px; } }
 #mapa { min-height: 0; background: var(--map-bg); position: relative; }
+@media (max-width: 899px) {
+  .painel { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1001; border-radius: 16px 16px 0 0; border-top: 0;
+    box-shadow: 0 -6px 24px rgba(0,0,0,.18); transition: height .25s ease; height: 44%; }
+  .painel[data-gaveta="fechada"] { height: 104px; }
+  .painel[data-gaveta="cheia"] { height: calc(100% - 12px); }
+  .painel.arrastando { transition: none; }
+  .alca { display: grid; place-items: center; height: 18px; cursor: grab; touch-action: none; }
+  .alca span { width: 40px; height: 5px; border-radius: 99px; background: var(--line); }
+  .painel-topo { border-bottom: 0; padding-top: 0; }
+  .painel[data-gaveta="fechada"] .cab-rotulos, .painel[data-gaveta="fechada"] .lista { visibility: hidden; }
+  #mapa .fab { bottom: calc(44% + 12px); transition: bottom .25s ease; }
+  .leaflet-bottom { bottom: 44%; }
+}
+@media (min-width: 900px) { .alca { display: none; } .corpo { grid-template-columns: minmax(0,1fr) 420px; } }
 .painel { min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--surface); border-top: 1px solid var(--line); }
 @media (min-width: 900px) { .painel { border-top: 0; border-left: 1px solid var(--line); } }
 
@@ -152,6 +179,9 @@ button { cursor: pointer; }
 
 /* ---------- Modais ---------- */
 .fundo { position: fixed; inset: 0; background: rgba(5,15,16,.55); z-index: 2000; display: grid; place-items: end center; }
+/* com a barra de navegação, as telas abrem acima dela (a barra continua tocável) */
+body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); }
+.fundo > .modal { max-height: calc(100% - 24px); }
 @media (min-width: 600px) { .fundo { place-items: center; } }
 .modal { background: var(--surface); width: min(100%, 520px); max-height: 92vh; overflow: auto; border-radius: 16px 16px 0 0;
   padding: 18px 16px calc(16px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 14px; }
@@ -413,7 +443,8 @@ button { cursor: pointer; }
       <button class="fab" id="btn-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>Lugar</button>
       <div class="aviso-mapa" id="aviso-mira" hidden>Toque no mapa onde fica o lugar <button id="cancelar-mira">Cancelar</button></div>
     </div>
-    <section class="painel">
+    <section class="painel" id="painel" data-gaveta="meia">
+      <div class="alca" id="alca" aria-label="Arrastar a lista"><span></span></div>
       <div class="painel-topo">
         <h2 id="painel-titulo">Cidades</h2>
         <input id="filtro" type="search" placeholder="Filtrar lista">
@@ -422,6 +453,13 @@ button { cursor: pointer; }
       <div class="lista" id="lista"></div>
     </section>
   </main>
+  <nav class="barra-nav" id="barra-nav">
+    <button data-nav="mapa" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg><span>Mapa</span></button>
+    <button data-nav="band"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg><span>Bandeiras</span></button>
+    <button data-nav="est"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Estatísticas</span></button>
+    <button data-nav="viagens"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17h18M6 17l2-6h8l2 6M9 11V7a3 3 0 0 1 6 0v4"/></svg><span>Viagens</span></button>
+    <button data-nav="mais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>Mais</span></button>
+  </nav>
 </div>
 
 <div id="modais"></div>
@@ -1089,8 +1127,9 @@ function atualizaTudo() {
     ['atracao', c.atracao, 'Atrações e parques'],
     ['outro', c.outro, 'Outros'],
   ];
-  $('#contadores').innerHTML = itens.map(([k, v, t]) =>
-    `<button class="contador" data-aba="${k}" aria-pressed="${S.aba === k}"><b>${v}</b><span>${t}</span></button>`).join('');
+  const ICONE_ABA = { paises: ICONES.pais, estados: ICONES.outro, cidade: ICONES.cidade, unesco: ICONES.unesco, transporte: ICONES.aeroporto, atracao: ICONES.atracao, outro: ICONES.outro };
+  $('#contadores').innerHTML = itens.filter(([k, v]) => k !== 'outro' || v).map(([k, v, t]) =>
+    `<button class="contador" data-aba="${k}" aria-pressed="${S.aba === k}" title="${t}">${ICONE_ABA[k] || ''}<b>${v}</b></button>`).join('');
   renderLista(); desenhaBase();
 }
 function linhaLugar(l) {
@@ -2487,10 +2526,7 @@ function abreMenu() {
   abreModal(`
     <h3>Menu</h3>
     <div class="menu-lista">
-      <button id="m-est">Estatísticas<small>Países, continentes e área do mundo</small></button>
-      <button id="m-band">Bandeiras<small>Sua coleção de países</small></button>
       <button id="m-tempo">Linha do tempo<small>Suas visitas por ano e mês</small></button>
-      <button id="m-viagens">Viagens<small>Junte os lugares de cada viagem</small></button>
       <button id="m-card">Imagem para compartilhar<small>Mapa e números prontos para WhatsApp e Instagram</small></button>
       <button id="m-comp">Compartilhar meu mapa<small>Link só de leitura para amigos e família</small></button>
       <button id="m-backup">Baixar meus dados<small>Cópia em planilha ou arquivo completo</small></button>
@@ -2501,10 +2537,10 @@ function abreMenu() {
     </div>`, (m, fechar) => {
     m.querySelector('#m-rot').onclick = () => { fechar(); abreRotulos(); };
     m.querySelector('#m-tempo').onclick = () => { fechar(); abreLinhaDoTempo(); };
-    m.querySelector('#m-viagens').onclick = () => { fechar(); abreViagens(); };
+    m.querySelector('#m-viagens') && (m.querySelector('#m-viagens').onclick = () => { fechar(); abreViagens(); });
     m.querySelector('#m-card').onclick = () => { fechar(); abreCard(); };
-    m.querySelector('#m-est').onclick = () => { fechar(); abreEstatisticas(); };
-    m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); };
+    m.querySelector('#m-est') && (m.querySelector('#m-est').onclick = () => { fechar(); abreEstatisticas(); });
+    m.querySelector('#m-band') && (m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); });
     m.querySelector('#m-comp').onclick = () => { fechar(); abreCompartilhar(); };
     m.querySelector('#m-backup').onclick = () => { fechar(); abreBackup(); };
     m.querySelector('#m-imp').onclick = () => { fechar(); abreImportacao(); };
@@ -2574,6 +2610,34 @@ async function entrar(user) {
   montaApp(); atualizaSinal();
 }
 
+function ligaNavegacao() {
+  const nav = $('#barra-nav'); if (!nav) return;
+  if (S.publico) nav.hidden = true;
+  const marca = k => nav.querySelectorAll('button').forEach(b => b.dataset.nav === k ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
+  const fechaModais = () => document.querySelectorAll('#modais .fundo').forEach(f => f.remove());
+  const acoes = { mapa: () => {}, band: () => abreBandeiras(), est: () => abreEstatisticas(), viagens: () => abreViagens(), mais: () => abreMenu() };
+  nav.querySelectorAll('button').forEach(b => b.onclick = () => { fechaModais(); marca(b.dataset.nav); acoes[b.dataset.nav](); });
+  // ao fechar qualquer tela, a barra volta para "Mapa"
+  new MutationObserver(() => { if (!document.querySelector('#modais .fundo')) marca('mapa'); }).observe($('#modais'), { childList: true });
+}
+// lista em gaveta: três alturas (fechada, meia, cheia); arrasta pela alça ou toca para alternar
+function ligaGaveta() {
+  const painel = $('#painel'), alca = $('#alca'); if (!painel || !alca) return;
+  const ALTURAS = ['fechada', 'meia', 'cheia'];
+  const ajustaMapa = () => { const h = painel.getBoundingClientRect().height; const fab = $('#mapa .fab'); if (fab) fab.style.bottom = (h + 12) + 'px';
+    document.querySelectorAll('#mapa .leaflet-bottom').forEach(e => e.style.bottom = h + 'px'); };
+  const define = g => { painel.dataset.gaveta = g; setTimeout(() => { ajustaMapa(); mapa && mapa.invalidateSize(); }, 260); };
+  let y0 = null, h0 = 0, moveu = false;
+  alca.addEventListener('pointerdown', e => { y0 = e.clientY; h0 = painel.getBoundingClientRect().height; moveu = false; painel.classList.add('arrastando'); alca.setPointerCapture(e.pointerId); });
+  alca.addEventListener('pointermove', e => { if (y0 == null) return; const d = y0 - e.clientY; if (Math.abs(d) > 4) moveu = true; painel.style.height = Math.max(90, h0 + d) + 'px'; ajustaMapa(); });
+  alca.addEventListener('pointerup', e => {
+    painel.classList.remove('arrastando'); const h = painel.getBoundingClientRect().height, total = painel.parentElement.getBoundingClientRect().height; painel.style.height = '';
+    if (!moveu) { define(ALTURAS[(ALTURAS.indexOf(painel.dataset.gaveta) + 1) % 3]); y0 = null; return; }
+    define(h < total * 0.25 ? 'fechada' : h < total * 0.7 ? 'meia' : 'cheia'); y0 = null;
+  });
+  painel.querySelector('.painel-topo').addEventListener('click', e => { if (e.target.closest('input')) { if (painel.dataset.gaveta === 'fechada') define('meia'); return; } if (painel.dataset.gaveta === 'fechada') define('meia'); });
+  window.addEventListener('resize', ajustaMapa); setTimeout(ajustaMapa, 300);
+}
 function montaApp() {
   carregaRanking().then(() => atualizaTudo()).catch(() => {});
   $('#carregando').hidden = true; $('#app').hidden = false;
@@ -2604,6 +2668,7 @@ function montaApp() {
     atualizaTudo();
   });
   $('#btn-menu').onclick = S.publico ? abreMenuPublico : abreMenu;
+  ligaNavegacao(); ligaGaveta();
   if (S.publico) return;
   $('#busca').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.value.trim().length > 1) buscar(e.target.value.trim()); if (e.key === 'Escape') $('#resultados').hidden = true; });
   $('#busca').addEventListener('input', e => sugereEnquantoDigita(e.target.value));
