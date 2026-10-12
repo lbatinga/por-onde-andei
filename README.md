@@ -21,3 +21,11 @@ Estados: primeiro nível que as pessoas reconhecem. Itália, França e Espanha p
 ## Compartilhar
 
 `viagem_compartilhar` guarda um token aleatório por pessoa. O link `/?v=<token>` abre o app em modo visitante (só leitura), usando a função `viagem_publico(token)`, que devolve rótulos, lugares e marcações; notas e datas de visita não saem. Desmarcar "Link ativo" corta o acesso na hora.
+
+## Fotos
+
+Bucket privado `viagem-fotos` no Supabase Storage, caminho `<usuário>/<lugar>/<arquivo>.jpg`. O app reduz cada foto para no máximo 1600 px (JPEG ~80%) antes de enviar. Fotos não aparecem no link público.
+
+## Atualização das bases
+
+Agendado no pg_cron, todo ano em agosto (depois da reunião anual da UNESCO): `viagem_atualiza_bases_pedir()` no dia 1º às 6h pede as listas à Wikidata; `viagem_atualiza_bases_processar()` às 6h30 acrescenta só o que é novo (UNESCO, parques, atrações 45+). Se alguma lista der timeout, `viagem_atualiza_bases_repetir()` tenta de novo no dia 2. O resultado fica em `viagem_base_pedidos`.
