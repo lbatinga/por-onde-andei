@@ -187,6 +187,12 @@ button { cursor: pointer; }
 .destaques b { font: 800 1.5rem/1.1 var(--f-display); color: var(--visit); font-variant-numeric: tabular-nums; }
 .destaques span { font-size: .78rem; color: var(--muted); }
 .barra { display: grid; gap: 4px; }
+.modal h5 { margin: 14px 0 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.anos { display: grid; gap: 4px; margin: 6px 0 10px; }
+.ano { display: grid; grid-template-columns: 3.2em 1fr 2.4em; align-items: center; gap: 8px; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.ano b { text-align: right; } .ano-barra { height: 10px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.ano-barra div { height: 100%; background: var(--visit); border-radius: 99px; }
+.casa-campo { margin-bottom: 6px; }
 .barra-topo { display: flex; justify-content: space-between; font-size: .9rem; }
 .barra-topo b { font-variant-numeric: tabular-nums; } .barra-topo small { color: var(--muted); font-weight: 400; }
 .barra-fundo { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
@@ -511,6 +517,9 @@ async function baixaGeo() {
   const fp = topojson.feature(tp, Object.values(tp.objects)[0]);
   const fe = topojson.feature(te, Object.values(te.objects)[0]);
   S.paises = preparaFeicoes(fp); S.estados = preparaFeicoes(fe);
+  // Natural Earth põe algumas ilhas em "Seven seas"; vão para o continente da classificação da ONU
+  const ILHAS = { SC: 'Africa', MU: 'Africa', SH: 'Africa', IO: 'Africa', TF: 'Africa', MV: 'Asia', GS: 'South America', HM: 'Oceania' };
+  S.paises.forEach(p => { if (ILHAS[p.id]) p.continente = ILHAS[p.id]; });
   S.paises.forEach(p => S.paisPorId.set(p.id, p));
   S.estados.forEach(e => S.estadoPorId.set(e.id, e));
   S.fcPaises = fp; S.fcEstados = fe;
@@ -527,13 +536,13 @@ function salvaCopia() {
   if (S.publico || !S.user) return;
   try {
     localStorage.setItem(CHAVE_COPIA, JSON.stringify({ user: { id: S.user.id, email: S.user.email }, em: Date.now(), rotulos: S.rotulos, lugares: S.lugares,
-      lr: [...S.lr].map(([l, m]) => [l, [...m.keys()]]), visitas: S.visitas || [], viagens: S.viagens || [], paradas: S.paradas || [] }));
+      lr: [...S.lr].map(([l, m]) => [l, [...m.keys()]]), visitas: S.visitas || [], viagens: S.viagens || [], paradas: S.paradas || [], config: S.config || {} }));
   } catch {}
 }
 let tCopia; const agendaCopia = () => { clearTimeout(tCopia); tCopia = setTimeout(salvaCopia, 1500); };
 function leCopia() { try { return JSON.parse(localStorage.getItem(CHAVE_COPIA)); } catch { return null; } }
 function aplicaCopia(c) {
-  S.rotulos = c.rotulos || []; S.lugares = c.lugares || []; S.visitas = c.visitas || []; S.viagens = c.viagens || []; S.paradas = c.paradas || [];
+  S.rotulos = c.rotulos || []; S.lugares = c.lugares || []; S.visitas = c.visitas || []; S.viagens = c.viagens || []; S.paradas = c.paradas || []; S.config = c.config || {};
   S.lr = new Map((c.lr || []).map(([l, rs]) => [l, new Map(rs.map(r => [r, null]))]));
 }
 let fila = (() => { try { return JSON.parse(localStorage.getItem(CHAVE_FILA)) || []; } catch { return []; } })();
@@ -601,6 +610,7 @@ async function carregaDados() {
   S.visitas = await todos(() => supa.from('viagem_visitas').select('id,lugar_id,data,precisao,nota,viagem_id').order('data', { ascending: false })).catch(() => []);
   S.viagens = await todos(() => supa.from('viagem_viagens').select('*')).catch(() => []);
   S.paradas = await todos(() => supa.from('viagem_paradas').select('id,viagem_id,lugar_id,ordem,transporte')).catch(() => []);
+  S.config = (await supa.from('viagem_config').select('casa_lugar_id').maybeSingle().then(r => r.data).catch(() => null)) || {};
   S.lr = new Map();
   for (const x of lr) { if (!S.lr.has(x.lugar_id)) S.lr.set(x.lugar_id, new Map()); S.lr.get(x.lugar_id).set(x.rotulo_id, x.data); }
   salvaCopia();
@@ -1986,6 +1996,21 @@ function barra(rot, a, b) {
   const w = b ? Math.max(a ? 2 : 0, Math.round(100 * a / b)) : 0;
   return `<div class="barra"><div class="barra-topo"><span>${esc(rot)}</span><b>${num(a)} <small>de ${num(b)}</small></b></div><div class="barra-fundo"><div style="width:${w}%"></div></div></div>`;
 }
+// ---- dados do Brasil para as estatísticas
+const CAPITAIS = ['1200401','2704302','1600303','1302603','2927408','2304400','5300108','3205309','5208707','2111300','5103403','5002704','3106200','1501402','2507507','4106902','2611606','2211001','3304557','2408102','4314902','1100205','1400100','4205407','3550308','2800308','1721000'];
+const REGIOES_BR = { Norte: ['AC','AM','AP','PA','RO','RR','TO'], Nordeste: ['AL','BA','CE','MA','PB','PE','PI','RN','SE'], 'Centro-Oeste': ['DF','GO','MS','MT'], Sudeste: ['ES','MG','RJ','SP'], Sul: ['PR','RS','SC'] };
+// casa: a cidade escolhida; sem escolha, a primeira marcada como "Morei"
+function casa() {
+  const c = S.config?.casa_lugar_id && S.lugares.find(l => l.id === S.config.casa_lugar_id);
+  if (c) return c;
+  const morei = S.rotulos.find(r => norm(r.nome) === 'morei');
+  return morei ? S.lugares.find(l => l.tipo === 'cidade' && rotulosDe(l.id).has(morei.id)) : null;
+}
+async function salvaCasa(id) {
+  const { error } = await supa.from('viagem_config').upsert({ user_id: S.user.id, casa_lugar_id: id || null, atualizado_em: new Date().toISOString() });
+  if (error) return toast('Erro: ' + error.message);
+  S.config = { ...(S.config || {}), casa_lugar_id: id || null }; salvaCopia();
+}
 function abreEstatisticas() {
   calcula();
   const vis = idsVisita(), visitados = S.lugares.filter(l => visitado(l.id, vis));
@@ -1993,40 +2018,92 @@ function abreEstatisticas() {
   const areaEst = [...estadosVis].reduce((t, id) => t + (S.estadoPorId.get(id) ? areaFeicao(S.estadoPorId.get(id)) : 0), 0);
   const conts = new Map();
   S.paises.forEach(p => { const c = CONTINENTES[p.continente] || 'Outros'; if (!conts.has(c)) conts.set(c, [0, 0]); conts.get(c)[1]++; if (paisesVis.has(p.id)) conts.get(c)[0]++; });
-  const contsVis = [...conts].filter(([, [v]]) => v).length;
-  const munBR = new Set(visitados.filter(l => l.tipo === 'cidade' && l.ref_externa?.startsWith('ibge:')).map(l => l.ref_externa)).size;
-  const ufsBR = [...estadosVis].filter(e => e.startsWith('BR-')).length;
+  const contsVis = [...conts].filter(([, [v]]) => v);
+  const faltam = [...conts].filter(([, [v]]) => !v).map(([c]) => c).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const ufsBR = new Set([...estadosVis].filter(e => e.startsWith('BR-')).map(e => e.slice(3)));
   const cidadesVis = visitados.filter(l => l.tipo === 'cidade');
+  const ibgeVis = new Set(cidadesVis.filter(l => l.ref_externa?.startsWith('ibge:')).map(l => l.ref_externa.slice(5)));
   const ext = k => cidadesVis.reduce((m, l) => !m || k(l, m) ? l : m, null);
   const norte = ext((a, b) => a.lat > b.lat), sul = ext((a, b) => a.lat < b.lat), leste = ext((a, b) => a.lon > b.lon), oeste = ext((a, b) => a.lon < b.lon);
   const so = idsSoLugar(), porTipo = {}; S.lugares.filter(l => visitado(l.id, vis) || soLugar(l.id, so)).forEach(l => { const t = ehParque(l) ? 'parque' : l.tipo; porTipo[t] = (porTipo[t] || 0) + 1; });
   const NOMES_T = { cidade: 'Cidades', unesco: 'Patrimônios UNESCO', aeroporto: 'Aeroportos', porto: 'Portos', atracao: 'Atrações', parque: 'Parques nacionais', outro: 'Outros lugares' };
   const porRot = S.rotulos.map(r => [r, S.lugares.filter(l => rotulosDe(l.id).has(r.id)).length]);
+  const capitais = CAPITAIS.filter(c => ibgeVis.has(c)).length;
+  // por ano: ano da primeira visita de cada lugar visitado
+  const primeira = new Map();
+  for (const v of S.visitas || []) { if (!visitado(v.lugar_id, vis)) continue; const a = primeira.get(v.lugar_id); if (!a || v.data < a) primeira.set(v.lugar_id, v.data); }
+  const porAno = new Map(); for (const d of primeira.values()) { const a = d.slice(0, 4); porAno.set(a, (porAno.get(a) || 0) + 1); }
+  const anos = [...porAno].sort((a, b) => a[0].localeCompare(b[0])), maxAno = Math.max(1, ...porAno.values());
+  const melhor = [...porAno].sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0];
+  const porLugar = new Map(S.lugares.map(l => [l.id, l]));
+  const c0 = casa(), paisCasa = c0?.pais || 'BR';
+  const intl = [...primeira].filter(([id]) => porLugar.get(id)?.pais && porLugar.get(id).pais !== paisCasa).sort((a, b) => a[1].localeCompare(b[1]))[0];
+  const semData = visitados.length - primeira.size;
+  const longe = c0 ? visitados.filter(l => l.id !== c0.id).map(l => [l, distKm(c0.lat, c0.lon, l.lat, l.lon)]).sort((a, b) => b[1] - a[1])[0] : null;
+  const opcoesCasa = (() => {
+    const morei = S.rotulos.find(r => norm(r.nome) === 'morei');
+    const cs = cidadesVis.slice().sort((a, b) => (morei && rotulosDe(b.id).has(morei.id)) - (morei && rotulosDe(a.id).has(morei.id)) || a.nome.localeCompare(b.nome, 'pt-BR'));
+    return cs.map(l => `<option value="${l.id}" ${c0?.id === l.id ? 'selected' : ''}>${esc(l.nome)}${l.estado ? ' · ' + esc(nomeEstado(l.estado)) : ''}</option>`).join('');
+  })();
   abreModal(`
     <h3>Estatísticas</h3>
     <div class="destaques">
       <div><b>${pct(areaEst, areaMundo)}</b><span>da área do mundo</span></div>
       <div><b>${paisesVis.size}</b><span>de ${S.paises.length} países (${pct(paisesVis.size, S.paises.length)})</span></div>
-      <div><b>${contsVis}</b><span>de ${conts.size} continentes</span></div>
+      <div><b>${contsVis.length}</b><span>de ${conts.size} continentes</span></div>
     </div>
-    <p class="meta">A área conta os estados e províncias por onde você passou.</p>
+    <p class="meta">A área soma cada estado ou província onde você esteve, inteiro: passar por Manaus conta o Amazonas todo. É o mesmo critério do Places Been.</p>
     <h4>Por continente</h4>
-    ${[...conts].sort((a, b) => b[1][0] - a[1][0] || a[0].localeCompare(b[0])).map(([c, [v, t]]) => barra(c, v, t)).join('')}
+    ${contsVis.sort((a, b) => b[1][0] - a[1][0]).map(([c, [v, t]]) => barra(c, v, t)).join('')}
+    ${faltam.length ? `<p class="meta">Faltam ${faltam.length}: ${esc(faltam.join(', '))}.</p>` : '<p class="meta">Todos os continentes!</p>'}
+    <h4>Brasil</h4>
+    ${barra('Estados', ufsBR.size, 27)}${barra('Capitais', capitais, 27)}<div id="st-mun-total"></div>
+    <h5>Por região</h5>
+    ${Object.entries(REGIOES_BR).map(([r, ufs]) => barra(r, ufs.filter(u => ufsBR.has(u)).length, ufs.length)).join('')}
+    <h5>Municípios por estado</h5><div id="st-mun-uf"><p class="meta">Carregando…</p></div>
+    <h5>Patrimônios da UNESCO no Brasil</h5><div id="st-unesco"><p class="meta">Carregando…</p></div>
+    ${anos.length ? `<h4>Por ano</h4><p class="meta">Lugares visitados pela primeira vez em cada ano${semData ? ` (${semData} ainda sem data ficam de fora)` : ''}.</p>
+      <div class="anos">${anos.map(([a, n]) => `<div class="ano"><span>${a}</span><div class="ano-barra"><div style="width:${Math.round(100 * n / maxAno)}%"></div></div><b>${n}</b></div>`).join('')}</div>
+      <div class="tabela">${melhor ? `<span>Melhor ano</span><b>${melhor[0]} · ${num(melhor[1])} ${melhor[1] === 1 ? 'lugar' : 'lugares'}</b>` : ''}
+      ${intl ? `<span>Primeira vez fora do país</span><b>${esc(nomePais(porLugar.get(intl[0]).pais))} · ${esc(nomeMes(intl[1].slice(0, 7)))}</b>` : ''}</div>` : ''}
     ${(S.viagens || []).length ? `<h4>Viagens</h4><div class="tabela">
       <span>Viagens registradas</span><b>${num(S.viagens.length)}</b>
       <span>Distância percorrida (linha reta)</span><b>${fmtKm(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0))}</b>
       ${(() => { const maior = [...S.viagens].sort((a, b) => kmViagem(b.id) - kmViagem(a.id))[0]; return maior ? `<span>Mais longa: ${esc(maior.nome)}</span><b>${fmtKm(kmViagem(maior.id))}</b>` : ''; })()}
       <span>Voltas na Terra</span><b>${(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0) / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b>
       ${(() => { const tot = kmPorTransporte(); return [...Object.keys(TRANSPORTES), 'local', 'sem'].filter(k => tot.get(k) >= 0.5).map(k => `<span>${k === 'sem' ? 'Trechos sem transporte marcado' : k === 'local' ? 'Trajetos até aeroportos e portos' : TRANSPORTES[k].join(' ')}</span><b>${fmtKm(Math.round(tot.get(k)))}</b>`).join(''); })()}</div>` : ''}
-    <h4>Brasil</h4>
-    ${barra('Estados', ufsBR, 27)}${barra('Municípios', munBR, S.mun?.length || 5570)}
+    <h4>Distâncias</h4>
+    ${S.publico ? '' : `<div class="campo casa-campo"><label for="st-casa">Sua casa</label><select id="st-casa"><option value="">Escolha a cidade</option>${opcoesCasa}</select></div>`}
+    <div class="tabela">
+      ${longe ? `<span>Mais longe de casa</span><b>${esc(longe[0].nome)} · ${fmtKm(Math.round(longe[1]))}</b>` : ''}
+      ${norte ? `<span>Cidade mais ao norte</span><b>${esc(norte.nome)}</b><span>Mais ao sul</span><b>${esc(sul.nome)}</b>
+      <span>Mais a leste</span><b>${esc(leste.nome)}</b><span>Mais a oeste</span><b>${esc(oeste.nome)}</b>` : ''}</div>
     <h4>O que você já marcou</h4>
     <div class="tabela">${Object.keys(NOMES_T).filter(t => porTipo[t]).map(t => `<span>${NOMES_T[t]}</span><b>${num(porTipo[t])}</b>`).join('')}
       ${porRot.map(([r, n]) => `<span><i class="bolinha" style="background:${esc(r.cor)}"></i>${esc(r.nome)}</span><b>${num(n)}</b>`).join('')}</div>
-    ${norte ? `<h4>Cidades nos extremos</h4><div class="tabela">
-      <span>Mais ao norte</span><b>${esc(norte.nome)}</b><span>Mais ao sul</span><b>${esc(sul.nome)}</b>
-      <span>Mais a leste</span><b>${esc(leste.nome)}</b><span>Mais a oeste</span><b>${esc(oeste.nome)}</b></div>` : ''}
-    <div class="acoes"><button class="btn" id="st-fechar">Fechar</button></div>`, (m, fechar) => { m.querySelector('#st-fechar').onclick = fechar; });
+    <div class="acoes"><button class="btn" id="st-fechar">Fechar</button></div>`, (m, fechar) => {
+    m.querySelector('#st-fechar').onclick = fechar;
+    const sel = m.querySelector('#st-casa');
+    if (sel) sel.onchange = async () => { await salvaCasa(sel.value); fechar(); abreEstatisticas(); };
+    // municípios (lista do IBGE) e UNESCO (base) chegam depois
+    carregaMunicipios().then(mun => {
+      const totUF = new Map(); mun.forEach(x => totUF.set(x.uf, (totUF.get(x.uf) || 0) + 1));
+      const visUF = new Map(); ibgeVis.forEach(c => { const x = S.munPorCod.get(c); if (x) visUF.set(x.uf, (visUF.get(x.uf) || 0) + 1); });
+      const t = m.querySelector('#st-mun-total'); if (t) t.innerHTML = barra('Municípios', ibgeVis.size, mun.length);
+      const box = m.querySelector('#st-mun-uf'); if (!box) return;
+      const linhas = [...visUF].map(([uf, n]) => [uf, n, totUF.get(uf)]).sort((a, b) => b[1] / b[2] - a[1] / a[2] || b[1] - a[1]);
+      box.innerHTML = linhas.length ? linhas.map(([uf, n, t]) => barra(`${nomeEstado('BR-' + uf) || uf} · ${pct(n, t)}`, n, t)).join('') : '<p class="meta">Nenhum município ainda.</p>';
+    }).catch(() => { const box = m.querySelector('#st-mun-uf'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar a lista do IBGE.</p>'; });
+    carregaBase('unesco').then(base => {
+      const box = m.querySelector('#st-unesco'); if (!box) return;
+      const br = base.filter(b => (b.paises || [b.pais]).includes('BR'));
+      const feitos = new Set(S.lugares.filter(l => l.tipo === 'unesco' && visitado(l.id, vis)).map(l => l.ref_externa));
+      const falta = br.filter(b => !feitos.has(b.ref));
+      const perto = c0 ? falta.map(b => [b, distKm(c0.lat, c0.lon, b.lat, b.lon)]).sort((a, b) => a[1] - b[1]).slice(0, 3) : [];
+      box.innerHTML = barra('Patrimônios', br.length - falta.length, br.length)
+        + (perto.length ? `<p class="meta">Mais perto de casa que faltam:</p><div class="tabela">${perto.map(([b, d]) => `<span>${esc(b.nome)}</span><b>${fmtKm(Math.round(d))}</b>`).join('')}</div>` : '');
+    }).catch(() => { const box = m.querySelector('#st-unesco'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar a lista da UNESCO.</p>'; });
+  });
 }
 
 /* ================= Mapa de bandeiras ================= */
