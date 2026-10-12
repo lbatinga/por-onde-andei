@@ -17,3 +17,7 @@ Estados: primeiro nível que as pessoas reconhecem. Itália, França e Espanha p
 - **UNESCO**: tabela `viagem_unesco` no Supabase (só leitura), montada a partir do Wikidata (`P757`), com nome em português (rótulo pt/pt-br ou título da Wikipédia em português). Lugares marcados guardam `ref_externa = unesco:<id>`.
 - **Aeroportos**: `aeroportos.json`, do OurAirports (grandes e médios com voo comercial e código IATA), com nomes adaptados para o português. Lugares marcados guardam `ref_externa = iata:<código>`.
 - **Atrações e parques nacionais**: tabela `viagem_atracoes` (Wikidata): 430 atrações famosas (relevância = número de Wikipédias que têm artigo) e 2.438 parques nacionais. Ficam no tipo `atracao`; parques usam `ref_externa = parque:<QID>` e atrações `wd:<QID>`.
+
+## Compartilhar
+
+`viagem_compartilhar` guarda um token aleatório por pessoa. O link `/?v=<token>` abre o app em modo visitante (só leitura), usando a função `viagem_publico(token)`, que devolve rótulos, lugares e marcações; notas e datas de visita não saem. Desmarcar "Link ativo" corta o acesso na hora.

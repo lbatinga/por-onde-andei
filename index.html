@@ -179,6 +179,27 @@ button { cursor: pointer; }
 .linha-tempo .evento .txt { min-width: 0; }
 .linha-tempo .evento b { display: block; font-weight: 600; }
 .linha-tempo .evento small { color: var(--muted); }
+.modal h4 { font: 700 .8rem var(--f-body); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 6px 0 -4px; }
+.destaques { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.destaques div { background: var(--surface-2); border-radius: 10px; padding: 12px 10px; display: grid; gap: 2px; }
+.destaques b { font: 800 1.5rem/1.1 var(--f-display); color: var(--visit); font-variant-numeric: tabular-nums; }
+.destaques span { font-size: .78rem; color: var(--muted); }
+.barra { display: grid; gap: 4px; }
+.barra-topo { display: flex; justify-content: space-between; font-size: .9rem; }
+.barra-topo b { font-variant-numeric: tabular-nums; } .barra-topo small { color: var(--muted); font-weight: 400; }
+.barra-fundo { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.barra-fundo div { height: 100%; background: var(--visit); border-radius: 99px; }
+.tabela { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: .92rem; }
+.tabela b { text-align: right; font-variant-numeric: tabular-nums; }
+.bolinha { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.bandeiras { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.band-card { border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; padding: 10px 6px; display: grid; justify-items: center; gap: 4px; }
+.band-card span { font-size: 2.6rem; line-height: 1; }
+.band-card small { font-size: .78rem; text-align: center; }
+.band-card.quero { opacity: .45; filter: grayscale(.8); }
+.selo { font-size: .72rem; font-weight: 700; color: #fff; background: var(--c); border-radius: 99px; padding: 3px 8px; white-space: nowrap; }
+.menu-link { display: block; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); color: var(--accent); font-weight: 700; text-decoration: none; }
+.publico .busca, .publico .fab { display: none !important; }
 .acoes { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 10px 16px; font-weight: 600; }
 .btn.principal { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
@@ -503,6 +524,7 @@ let camadaBase;
 function desenhaBase() {
   if (!camadaBase) return;
   camadaBase.clearLayers();
+  if (S.publico) return;
   const base = basePorAba(S.aba); if (!base.length) return;
   const z = mapa.getZoom(); if (z < (S.aba === 'unesco' ? 3 : S.aba === 'atracao' ? 4 : 5)) return;
   const bb = mapa.getBounds().pad(0.05); let n = 0;
@@ -694,7 +716,9 @@ function atualizaTudo() {
 function linhaLugar(l) {
   const m = rotulosDe(l.id);
   const local = [nomeEstado(l.estado), nomePais(l.pais)].filter(Boolean).join(', ');
-  const marcas = S.rotulos.map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="${m.has(r.id)}" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-l="${l.id}" data-r="${r.id}">${CHECK}</button>`).join('');
+  const marcas = S.publico
+    ? S.rotulos.filter(r => m.has(r.id)).map(r => `<span class="selo" style="--c:${esc(r.cor)}">${esc(r.nome)}</span>`).join('')
+    : S.rotulos.map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="${m.has(r.id)}" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-l="${l.id}" data-r="${r.id}">${CHECK}</button>`).join('');
   const estiloTipo = l.tipo === 'unesco' ? ` style="color:#fff;border:0;background:${fundoCat(catDe(l.ref_externa))}"` : '';
   return `<div class="item"><span class="tipo"${estiloTipo}>${iconeDe(l)}</span>
     <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : ehParque(l) ? 'Parque nacional' : '', local || TIPOS[l.tipo].um, visitasDe(l.id)[0] ? fmtVisita(visitasDe(l.id)[0]) : ''].filter(Boolean).join(' · '))}</small></button>
@@ -758,7 +782,7 @@ function renderLista() {
     html = avisoMapa(ls.length, todos.length) + ls.map(linhaLugar).join('');
     if (!ls.length && todos.length) html += '<div class="vazio-lista" style="padding:14px 20px"><b>Nenhum marcado nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     // itens da base ainda não marcados, na parte do mapa que está na tela
-    const base = basePorAba(aba);
+    const base = S.publico ? [] : basePorAba(aba);
     if (base.length) {
       const z = mapa ? mapa.getZoom() : 2;
       const outros = base.filter(b => !lugarDaRef(b.ref) && visivel(b) && (!f || norm(b.nome + ' ' + b.sub).includes(f)) && (aba !== 'transporte' || b.grande || z >= 6 || f) && (aba !== 'atracao' || !ehParque(b) || z >= 5 || f));
@@ -766,7 +790,7 @@ function renderLista() {
       if (outros.length) html += `<div class="grupo"><span>${aba === 'unesco' ? 'Outros patrimônios nesta área' : aba === 'atracao' ? 'Outras atrações e parques nesta área' : 'Outros aeroportos nesta área'}</span><span>${outros.length}</span></div>`
         + outros.slice(0, 150).map(linhaBase).join('')
         + (outros.length > 150 ? `<div class="vazio-lista">Mais ${outros.length - 150}. Aproxime o mapa ou filtre pelo nome.</div>` : '');
-    } else if (aba === 'unesco' || aba === 'transporte' || aba === 'atracao') {
+    } else if (!S.publico && (aba === 'unesco' || aba === 'transporte' || aba === 'atracao')) {
       carregaBase(aba === 'unesco' ? 'unesco' : aba === 'atracao' ? 'atracao' : 'aeroporto').then(() => { renderLista(); desenhaBase(); }).catch(() => {});
     }
     if (!html) html = f ? `<div class="vazio-lista"><b>Nada encontrado</b>Nenhum item com “${esc(S.filtro)}”.</div>`
@@ -949,6 +973,7 @@ function novoLugar(dados, sugestoes) {
   });
 }
 async function novoLugarEm(lat, lon) {
+  if (S.publico) return;
   let sugestoes = [], tipo = 'cidade';
   const loc = localizar(lat, lon);
   if (loc.pais === 'BR') {
@@ -974,6 +999,12 @@ async function novoLugarEm(lat, lon) {
 function abreLugar(id) {
   const l = S.lugares.find(x => x.id === id); if (!l) return;
   mapa.setView([l.lat, l.lon], Math.max(mapa.getZoom(), 9));
+  if (S.publico) {
+    const rots = S.rotulos.filter(r => rotulosDe(id).has(r.id));
+    return abreModal(`<h3>${esc(l.nome)}</h3><p>${esc([TIPOS[l.tipo].um, nomeEstado(l.estado), nomePais(l.pais)].filter(Boolean).join(' · '))}</p>
+      <div class="chips">${rots.map(r => `<span class="chip" style="--c:${esc(r.cor)}" aria-pressed="true">${esc(r.nome)}</span>`).join('')}</div>
+      <div class="acoes"><button class="btn" id="p-fechar">Fechar</button></div>`, (m, fechar) => { m.querySelector('#p-fechar').onclick = fechar; });
+  }
   formLugar({
     titulo: l.nome, l, rotSel: new Set(rotulosDe(id).keys()),
     aoSalvar: async (v, sel) => {
@@ -1278,12 +1309,132 @@ function abreLinhaDoTempo() {
   });
 }
 
+/* ================= Estatísticas ================= */
+const RAD = Math.PI / 180;
+function areaAnel(r) {
+  let soma = 0;
+  for (let i = 0; i < r.length; i++) { const [x1, y1] = r[i], [x2, y2] = r[(i + 1) % r.length]; soma += (x2 - x1) * RAD * (2 + Math.sin(y1 * RAD) + Math.sin(y2 * RAD)); }
+  return Math.abs(soma) * 6371 * 6371 / 2;
+}
+const areaFeicao = f => f._area ??= f.polys.reduce((t, p) => t + areaAnel(p[0]) - p.slice(1).reduce((h, b) => h + areaAnel(b), 0), 0);
+const pct = (a, b) => b ? (100 * a / b).toLocaleString('pt-BR', { maximumFractionDigits: a / b < 0.1 ? 2 : 1 }) + '%' : '0%';
+const num = n => n.toLocaleString('pt-BR');
+function barra(rot, a, b) {
+  const w = b ? Math.max(a ? 2 : 0, Math.round(100 * a / b)) : 0;
+  return `<div class="barra"><div class="barra-topo"><span>${esc(rot)}</span><b>${num(a)} <small>de ${num(b)}</small></b></div><div class="barra-fundo"><div style="width:${w}%"></div></div></div>`;
+}
+function abreEstatisticas() {
+  calcula();
+  const vis = idsVisita(), visitados = S.lugares.filter(l => visitado(l.id, vis));
+  const areaMundo = S.paises.reduce((t, p) => t + areaFeicao(p), 0);
+  const areaEst = [...estadosVis].reduce((t, id) => t + (S.estadoPorId.get(id) ? areaFeicao(S.estadoPorId.get(id)) : 0), 0);
+  const conts = new Map();
+  S.paises.forEach(p => { const c = CONTINENTES[p.continente] || 'Outros'; if (!conts.has(c)) conts.set(c, [0, 0]); conts.get(c)[1]++; if (paisesVis.has(p.id)) conts.get(c)[0]++; });
+  const contsVis = [...conts].filter(([, [v]]) => v).length;
+  const munBR = new Set(visitados.filter(l => l.tipo === 'cidade' && l.ref_externa?.startsWith('ibge:')).map(l => l.ref_externa)).size;
+  const ufsBR = [...estadosVis].filter(e => e.startsWith('BR-')).length;
+  const ext = k => visitados.reduce((m, l) => !m || k(l, m) ? l : m, null);
+  const norte = ext((a, b) => a.lat > b.lat), sul = ext((a, b) => a.lat < b.lat), leste = ext((a, b) => a.lon > b.lon), oeste = ext((a, b) => a.lon < b.lon);
+  const porTipo = {}; visitados.forEach(l => { const t = ehParque(l) ? 'parque' : l.tipo; porTipo[t] = (porTipo[t] || 0) + 1; });
+  const NOMES_T = { cidade: 'Cidades', unesco: 'Patrimônios UNESCO', aeroporto: 'Aeroportos', porto: 'Portos', atracao: 'Atrações', parque: 'Parques nacionais', outro: 'Outros lugares' };
+  const porRot = S.rotulos.map(r => [r, S.lugares.filter(l => rotulosDe(l.id).has(r.id)).length]);
+  abreModal(`
+    <h3>Estatísticas</h3>
+    <div class="destaques">
+      <div><b>${pct(areaEst, areaMundo)}</b><span>da área do mundo</span></div>
+      <div><b>${paisesVis.size}</b><span>de ${S.paises.length} países (${pct(paisesVis.size, S.paises.length)})</span></div>
+      <div><b>${contsVis}</b><span>de ${conts.size} continentes</span></div>
+    </div>
+    <p class="meta">A área conta os estados e províncias por onde você passou.</p>
+    <h4>Por continente</h4>
+    ${[...conts].sort((a, b) => b[1][0] - a[1][0] || a[0].localeCompare(b[0])).map(([c, [v, t]]) => barra(c, v, t)).join('')}
+    <h4>Brasil</h4>
+    ${barra('Estados', ufsBR, 27)}${barra('Municípios', munBR, S.mun?.length || 5570)}
+    <h4>O que você já marcou</h4>
+    <div class="tabela">${Object.keys(NOMES_T).filter(t => porTipo[t]).map(t => `<span>${NOMES_T[t]}</span><b>${num(porTipo[t])}</b>`).join('')}
+      ${porRot.map(([r, n]) => `<span><i class="bolinha" style="background:${esc(r.cor)}"></i>${esc(r.nome)}</span><b>${num(n)}</b>`).join('')}</div>
+    ${norte ? `<h4>Extremos</h4><div class="tabela">
+      <span>Mais ao norte</span><b>${esc(norte.nome)}</b><span>Mais ao sul</span><b>${esc(sul.nome)}</b>
+      <span>Mais a leste</span><b>${esc(leste.nome)}</b><span>Mais a oeste</span><b>${esc(oeste.nome)}</b></div>` : ''}
+    <div class="acoes"><button class="btn" id="st-fechar">Fechar</button></div>`, (m, fechar) => { m.querySelector('#st-fechar').onclick = fechar; });
+}
+
+/* ================= Mapa de bandeiras ================= */
+function abreBandeiras() {
+  calcula();
+  const ord = ids => [...ids].sort((a, b) => nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
+  const card = (id, quero) => `<button class="band-card${quero ? ' quero' : ''}" data-pais="${esc(id)}"><span>${bandeira(id)}</span><small>${esc(nomePais(id))}</small></button>`;
+  abreModal(`
+    <h3>Minhas bandeiras</h3>
+    <p>${paisesVis.size} ${paisesVis.size === 1 ? 'país visitado' : 'países visitados'}${paisesQuero.size ? ` · ${paisesQuero.size} na lista de desejos` : ''}</p>
+    <div class="bandeiras">${ord(paisesVis).map(id => card(id)).join('')}</div>
+    ${paisesQuero.size ? `<h4>Quero ir</h4><div class="bandeiras">${ord(paisesQuero).map(id => card(id, true)).join('')}</div>` : ''}
+    <div class="acoes"><button class="btn" id="bd-fechar">Fechar</button></div>`, (m, fechar) => {
+    m.querySelector('#bd-fechar').onclick = fechar;
+    m.querySelectorAll('[data-pais]').forEach(b => b.onclick = () => { fechar(); const p = S.paisPorId.get(b.dataset.pais); S.aba = 'paises'; atualizaTudo(); if (p) mapa.fitBounds([[p.maior[1], p.maior[0]], [p.maior[3], p.maior[2]]]); });
+  });
+}
+
+/* ================= Compartilhar ================= */
+async function abreCompartilhar() {
+  let { data: reg } = await supa.from('viagem_compartilhar').select('*').maybeSingle();
+  const link = () => `${location.origin}/?v=${reg.token}`;
+  const desenhar = m => {
+    m.querySelector('#cp-corpo').innerHTML = !reg ? `
+      <p>Crie um link para mostrar seu mapa a quem você quiser. Quem abrir vê o mapa, as listas, as estatísticas e as bandeiras, sem poder mudar nada.</p>
+      <p class="meta">Notas e datas das visitas não aparecem no link.</p>
+      <div class="campo"><label for="cp-nome">Seu nome no mapa</label><input id="cp-nome" placeholder="Ex.: Lucas"></div>
+      <div class="acoes"><button class="btn" id="cp-fechar">Fechar</button><button class="btn principal" id="cp-criar">Criar link</button></div>` : `
+      <div class="campo"><label for="cp-link">Seu link</label><input id="cp-link" readonly value="${esc(link())}"></div>
+      <div class="acoes" style="justify-content:flex-start"><button class="btn principal" id="cp-copiar">Copiar link</button>${navigator.share ? '<button class="btn" id="cp-enviar">Enviar…</button>' : ''}</div>
+      <div class="campo"><label for="cp-nome">Seu nome no mapa</label><input id="cp-nome" value="${esc(reg.nome || '')}"></div>
+      <label class="meta" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="cp-ativo" ${reg.ativo ? 'checked' : ''}> Link ativo (desmarque para ninguém mais conseguir abrir)</label>
+      <div class="acoes"><button class="btn" id="cp-fechar">Fechar</button></div>`;
+    m.querySelector('#cp-fechar').onclick = () => m.closest('.fundo').remove();
+    if (!reg) {
+      m.querySelector('#cp-criar').onclick = async () => {
+        const { data, error } = await supa.from('viagem_compartilhar').insert({ nome: m.querySelector('#cp-nome').value.trim() || null }).select().single();
+        if (error) return toast('Erro: ' + error.message);
+        reg = data; desenhar(m);
+      };
+      return;
+    }
+    m.querySelector('#cp-copiar').onclick = async () => {
+      try { await navigator.clipboard.writeText(link()); toast('Link copiado'); }
+      catch { const i = m.querySelector('#cp-link'); i.select(); toast('Selecionei o link: é só copiar'); }
+    };
+    const env = m.querySelector('#cp-enviar');
+    if (env) env.onclick = () => navigator.share({ title: 'Meu mapa de viagens', text: 'Olha por onde eu já andei:', url: link() }).catch(() => {});
+    m.querySelector('#cp-nome').onchange = async e => { const { error } = await supa.from('viagem_compartilhar').update({ nome: e.target.value.trim() || null }).eq('user_id', reg.user_id); if (error) toast('Erro: ' + error.message); else toast('Nome salvo'); };
+    m.querySelector('#cp-ativo').onchange = async e => { const { error } = await supa.from('viagem_compartilhar').update({ ativo: e.target.checked }).eq('user_id', reg.user_id); if (error) return toast('Erro: ' + error.message); reg.ativo = e.target.checked; toast(reg.ativo ? 'Link ativado' : 'Link desativado'); };
+  };
+  abreModal(`<h3>Compartilhar meu mapa</h3><div id="cp-corpo"></div>`, m => desenhar(m));
+}
+
+function abreMenuPublico() {
+  abreModal(`
+    <h3>${esc(S.nomePublico ? 'Viagens de ' + S.nomePublico : 'Por Onde Andei')}</h3>
+    <div class="menu-lista">
+      <button id="m-est">Estatísticas<small>Países, continentes e área do mundo</small></button>
+      <button id="m-band">Bandeiras<small>Países visitados</small></button>
+      <button id="m-tudo">Ver tudo no mapa</button>
+      <a class="menu-link" href="/">Criar o meu mapa</a>
+    </div>`, (m, fechar) => {
+    m.querySelector('#m-est').onclick = () => { fechar(); abreEstatisticas(); };
+    m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); };
+    m.querySelector('#m-tudo').onclick = () => { fechar(); const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); };
+  });
+}
+
 /* ================= Menu ================= */
 function abreMenu() {
   abreModal(`
     <h3>Menu</h3>
     <div class="menu-lista">
+      <button id="m-est">Estatísticas<small>Países, continentes e área do mundo</small></button>
+      <button id="m-band">Bandeiras<small>Sua coleção de países</small></button>
       <button id="m-tempo">Linha do tempo<small>Suas visitas por ano e mês</small></button>
+      <button id="m-comp">Compartilhar meu mapa<small>Link só de leitura para amigos e família</small></button>
       <button id="m-rot">Rótulos<small>Criar, renomear, mudar cor</small></button>
       <button id="m-imp">Importar do Places Been<small>Arquivo CSV exportado do app</small></button>
       <button id="m-tudo">Ver todos os meus lugares no mapa</button>
@@ -1291,6 +1442,9 @@ function abreMenu() {
     </div>`, (m, fechar) => {
     m.querySelector('#m-rot').onclick = () => { fechar(); abreRotulos(); };
     m.querySelector('#m-tempo').onclick = () => { fechar(); abreLinhaDoTempo(); };
+    m.querySelector('#m-est').onclick = () => { fechar(); abreEstatisticas(); };
+    m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); };
+    m.querySelector('#m-comp').onclick = () => { fechar(); abreCompartilhar(); };
     m.querySelector('#m-imp').onclick = () => { fechar(); abreImportacao(); };
     m.querySelector('#m-tudo').onclick = () => { fechar(); const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); };
     m.querySelector('#m-sair').onclick = async () => { await supa.auth.signOut(); location.reload(); };
@@ -1343,7 +1497,12 @@ async function entrar(user) {
   try {
     await Promise.all([carregaGeo(), carregaDados()]);
   } catch (e) { $('#carregando').textContent = 'Erro ao carregar: ' + e.message; iniciado = false; return; }
+  montaApp();
+}
+
+function montaApp() {
   $('#carregando').hidden = true; $('#app').hidden = false;
+  document.body.classList.toggle('publico', !!S.publico);
   iniciaMapa(); atualizaTudo();
   carregaBase('unesco').then(() => atualizaTudo()).catch(() => {});
   const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1));
@@ -1356,20 +1515,38 @@ async function entrar(user) {
       return;
     }
     const mk = e.target.closest('.marca');
-    if (mk) return mk.dataset.base ? marcaBase(mk.dataset.base, mk.dataset.r) : alternaRotulo(mk.dataset.l, mk.dataset.r);
+    if (mk) { if (S.publico) return; return mk.dataset.base ? marcaBase(mk.dataset.base, mk.dataset.r) : alternaRotulo(mk.dataset.l, mk.dataset.r); }
     const abb = e.target.closest('[data-abrir-base]'); if (abb) return abreBase(abb.dataset.abrirBase);
     const ab = e.target.closest('[data-abrir]'); if (ab) return abreLugar(ab.dataset.abrir);
     const zp = e.target.closest('[data-zoom-pais]'); if (zp) { const p = S.paisPorId.get(zp.dataset.zoomPais); if (p) mapa.fitBounds([[p.maior[1], p.maior[0]], [p.maior[3], p.maior[2]]]); return; }
     const ze = e.target.closest('[data-zoom-estado]'); if (ze) { const p = S.estadoPorId.get(ze.dataset.zoomEstado); if (p) mapa.fitBounds([[p.bbox[1], p.bbox[0]], [p.bbox[3], p.bbox[2]]]); }
   });
   $('#filtro').addEventListener('input', e => { S.filtro = e.target.value; renderLista(); });
+  $('#btn-menu').onclick = S.publico ? abreMenuPublico : abreMenu;
+  if (S.publico) return;
   $('#busca').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.value.trim().length > 1) buscar(e.target.value.trim()); if (e.key === 'Escape') $('#resultados').hidden = true; });
   $('#busca').addEventListener('input', e => sugereEnquantoDigita(e.target.value));
   $('#busca').addEventListener('search', e => { if (!e.target.value) $('#resultados').hidden = true; });
   document.addEventListener('click', e => { if (!e.target.closest('.busca')) $('#resultados').hidden = true; });
-  $('#btn-menu').onclick = abreMenu;
   $('#btn-add').onclick = () => { S.modoMira = true; $('#aviso-mira').hidden = false; document.body.classList.add('mira'); };
   $('#cancelar-mira').onclick = e => { e.stopPropagation(); saiMira(); };
+}
+
+// Visitante abrindo o link compartilhado: só leitura, sem notas nem datas
+async function entrarPublico(token) {
+  S.publico = true;
+  try {
+    const [{ data, error }] = await Promise.all([supa.rpc('viagem_publico', { t: token }), carregaGeo()]);
+    if (error) throw error;
+    if (!data) { $('#carregando').innerHTML = '<div style="text-align:center;padding:24px"><b>Este link não está mais ativo.</b><br><a href="/">Ir para o Por Onde Andei</a></div>'; return; }
+    S.rotulos = (data.rotulos || []).sort((a, b) => a.ordem - b.ordem);
+    S.lugares = data.lugares || []; S.visitas = [];
+    S.lr = new Map(); for (const x of data.marcas || []) { if (!S.lr.has(x.lugar_id)) S.lr.set(x.lugar_id, new Map()); S.lr.get(x.lugar_id).set(x.rotulo_id, null); }
+    S.nomePublico = data.nome || '';
+    document.title = S.nomePublico ? `Viagens de ${S.nomePublico}` : 'Por Onde Andei';
+    $('.topo h1').innerHTML = S.nomePublico ? `Viagens de <span>${esc(S.nomePublico)}</span>` : 'Por Onde <span>Andei</span>';
+  } catch (e) { $('#carregando').textContent = 'Não consegui abrir este mapa: ' + e.message; return; }
+  montaApp();
 }
 
 (async () => {
@@ -1382,8 +1559,10 @@ async function entrar(user) {
         m.querySelector('#salvar-senha').onclick = async () => { const { error } = await supa.auth.updateUser({ password: m.querySelector('#nova').value }); if (error) return toast('Erro: ' + error.message); fechar(); toast('Senha alterada'); };
       });
     }
-    if (sessao?.user) entrar(sessao.user);
+    if (sessao?.user && !new URLSearchParams(location.search).get('v')) entrar(sessao.user);
   });
+  const tokenPublico = new URLSearchParams(location.search).get('v');
+  if (tokenPublico) return entrarPublico(tokenPublico);
   const { data } = await supa.auth.getSession();
   if (data.session?.user) entrar(data.session.user); else telaLogin();
 })();
