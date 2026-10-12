@@ -1593,8 +1593,18 @@ async function buscar(q) {
   const topo = linhasPaises(q) + (ms.length ? `<div class="grupo-busca">Municípios do Brasil</div>${ms.map(linhaMunicipio).join('')}` : '');
   box.hidden = false; box.innerHTML = topo + '<div class="vazio">Buscando no mundo…</div>';
   try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&limit=12&addressdetails=1&accept-language=pt-BR`).then(r => r.json());
+    // além da busca no mundo, procura só na área que está no mapa (com folga): assim a praça da cidade
+    // que você está olhando aparece primeiro, mesmo existindo dezenas de lugares com o mesmo nome
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&limit=12&addressdetails=1&accept-language=pt-BR`;
+    let area = null;
+    if (mapa && mapa.getZoom() >= 5) { const b = mapa.getBounds().pad(0.5); area = [b.getWest(), b.getNorth(), b.getEast(), b.getSouth()].map(v => v.toFixed(4)).join(','); }
+    const [locais, globais] = await Promise.all([
+      area ? fetch(`${url}&viewbox=${area}&bounded=1`).then(r => r.json()).catch(() => []) : Promise.resolve([]),
+      fetch(url).then(r => r.json()),
+    ]);
     if (seq !== buscaSeq) return;
+    locais.forEach(x => x._perto = true);
+    const r = [...locais, ...globais.filter(g => !locais.some(l => l.osm_type === g.osm_type && l.osm_id === g.osm_id))];
     // cidades do Brasil já vêm do IBGE; povoados e bairros não entram como cidade
     const mundo = r.filter(x => {
       const t = tipoDoResultado(x), cc = (x.address?.country_code || '').toUpperCase();
@@ -1605,9 +1615,11 @@ async function buscar(q) {
       // mesmo nome a menos de 50 km (cidade e o departamento/distrito de mesmo nome): fica só o primeiro
       const n = norm(x.name || x.display_name.split(',')[0]);
       return !arr.slice(0, i).some(y => norm(y.name || y.display_name.split(',')[0]) === n && distKm(+x.lat, +x.lon, +y.lat, +y.lon) < 50);
-    }).slice(0, 8);
-    const lista = mundo.map((x, i) => `<button data-i="${i}"><b>${esc(x.name || x.display_name.split(',')[0])}</b><small>${esc(TIPOS[tipoDoResultado(x)].um)} · ${esc(x.display_name.split(',').slice(1, 4).join(',').trim())}</small></button>`).join('');
-    box.innerHTML = topo + (lista ? `<div class="grupo-busca">No mundo</div>${lista}` : (topo ? '' : '<div class="vazio">Nada encontrado. Tente outro nome ou segure o dedo no mapa.</div>'));
+    }).slice(0, 10);
+    const linha = (x, i) => `<button data-i="${i}"><b>${esc(x.name || x.display_name.split(',')[0])}</b><small>${esc(TIPOS[tipoDoResultado(x)].um)} · ${esc(x.display_name.split(',').slice(1, 4).join(',').trim())}</small></button>`;
+    const perto = mundo.map((x, i) => x._perto ? linha(x, i) : '').join(''), longe = mundo.map((x, i) => x._perto ? '' : linha(x, i)).join('');
+    const lista = (perto ? `<div class="grupo-busca">Nesta área do mapa</div>${perto}` : '') + (longe ? `<div class="grupo-busca">No mundo</div>${longe}` : '');
+    box.innerHTML = topo + (lista ? lista : (topo ? '' : '<div class="vazio">Nada encontrado. Tente outro nome ou segure o dedo no mapa.</div>'));
     ligaResultados(box, mundo);
   } catch {
     box.innerHTML = topo + '<div class="vazio">Sem conexão com a busca no mundo agora. Tente de novo em instantes.</div>';
