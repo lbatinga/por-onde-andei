@@ -81,6 +81,8 @@ def mundo():
         i_pax = next(i for i, c in enumerate(cab) if "passenger" in c)
         i_nome = next((i for i, c in enumerate(cab) if "airport" in c), 1)
         lista = []
+        for sup in tabela.find_all("sup"):     # notas de rodapé [1] grudavam nos números
+            sup.decompose()
         for tr in tabela.find_all("tr")[1:]:
             cel = [td.get_text(" ", strip=True) for td in tr.find_all(["td", "th"])]
             if len(cel) <= max(i_code, i_pax):
@@ -89,7 +91,7 @@ def mundo():
             if not iata:
                 continue
             lista.append({"pos": len(lista) + 1, "iata": iata.group(1), "nome": cel[i_nome],
-                          "pax": int(re.sub(r"[^\d]", "", cel[i_pax]) or 0)})
+                          "pax": int(re.sub(r"[^\d]", "", (re.search(r"\d[\d,.\s]*", cel[i_pax]) or [""])[0]) or 0)})
         if len(lista) >= 10:
             print("Wikipedia/ACI ano", m.group(1), "aeroportos", len(lista), file=sys.stderr)
             return int(m.group(1)), lista[:50]
