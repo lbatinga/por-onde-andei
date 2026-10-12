@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
 /* Layout: barra superior + contadores; mapa em cima e lista embaixo no celular, lista lateral no computador */
 :root {
@@ -238,6 +239,8 @@ button { cursor: pointer; }
 <div id="modais"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
@@ -408,37 +411,49 @@ async function alternaRotulo(lugarId, rotuloId) {
 let mapa, camadaPaises, camadaEstados, camadaPinos, camadaRotPaises, camadaRotEstados, fundo;
 function corToken(nome) { return getComputedStyle(document.documentElement).getPropertyValue(nome).trim(); }
 function escuro() { return getComputedStyle(document.documentElement).colorScheme === 'dark'; }
+// Mapa de fundo: OpenFreeMap (vetorial, sem chave), com todos os nomes trocados para português
+async function estiloEmPortugues() {
+  for (const nome of [escuro() ? 'dark' : 'positron', 'positron']) {
+    try {
+      const r = await fetch(`https://tiles.openfreemap.org/styles/${nome}`);
+      if (!r.ok) continue;
+      const st = await r.json();
+      for (const ly of st.layers || []) {
+        const tf = ly.layout && ly.layout['text-field'];
+        if (ly.type === 'symbol' && tf && JSON.stringify(tf).includes('name'))
+          ly.layout['text-field'] = ['coalesce', ['get', 'name:pt'], ['get', 'name:latin'], ['get', 'name']];
+      }
+      return st;
+    } catch {}
+  }
+  return null;
+}
+async function colocaFundo() {
+  const atrib = '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · Natural Earth';
+  try {
+    if (!L.maplibreGL || !window.maplibregl) throw 0;
+    const st = await estiloEmPortugues(); if (!st) throw 0;
+    fundo = L.maplibreGL({ style: st, attribution: atrib }).addTo(mapa);
+  } catch {
+    // sem WebGL ou sem conexão com o OpenFreeMap: mapa simples do OpenStreetMap
+    fundo = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · Natural Earth' }).addTo(mapa);
+  }
+}
 function iniciaMapa() {
   mapa = L.map('mapa', { preferCanvas: true, zoomControl: true, worldCopyJump: true, minZoom: 2, attributionControl: true })
     .setView([-12, -48], 4);
-  const tiles = escuro() ? 'World_Dark_Gray_Base' : 'World_Light_Gray_Base';
-  fundo = L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${tiles}/MapServer/tile/{z}/{y}/{x}`, {
-    maxZoom: 16, maxNativeZoom: 16,
-    attribution: 'Mapa base © Esri · Natural Earth',
-  }).addTo(mapa);
+  colocaFundo();
   mapa.attributionControl.setPrefix(false);
 
   camadaPaises = L.geoJSON(S.fcPaises, { style: estiloPais, interactive: false }).addTo(mapa);
   camadaEstados = L.geoJSON(S.fcEstados, { style: estiloEstado, interactive: false });
-  camadaRotPaises = L.layerGroup(S.paises.filter(p => p.maior).map(p => {
-    const tier = p.tam > 18 ? 't1' : p.tam > 6 ? 't2' : 't3';
-    return L.marker([(p.maior[1] + p.maior[3]) / 2, (p.maior[0] + p.maior[2]) / 2], {
-      interactive: false, keyboard: false,
-      icon: L.divIcon({ className: `rot-mapa pais ${tier}`, html: `<div data-pais="${esc(p.id)}">${esc(p.nome)}</div>`, iconSize: [0, 0] }),
-    });
-  })).addTo(mapa);
-  camadaRotEstados = L.layerGroup(S.estados.filter(e => e.maior && e.tam > 1.2).map(e => L.marker(
-    [(e.maior[1] + e.maior[3]) / 2, (e.maior[0] + e.maior[2]) / 2], {
-      interactive: false, keyboard: false,
-      icon: L.divIcon({ className: `rot-mapa estado ${e.tam > 5 ? 'e1' : 'e2'}`, html: `<div data-estado="${esc(e.id)}">${esc(e.nome)}</div>`, iconSize: [0, 0] }),
-    })));
   camadaPinos = L.layerGroup().addTo(mapa);
 
   const ajustaZoom = () => {
     const z = mapa.getZoom(), el = mapa.getContainer();
     el.className = el.className.replace(/\bz\d+\b/g, '').trim() + ' z' + Math.min(z, 9);
-    if (z >= 4) { if (!mapa.hasLayer(camadaEstados)) camadaEstados.addTo(mapa); if (!mapa.hasLayer(camadaRotEstados)) camadaRotEstados.addTo(mapa); }
-    else { camadaEstados.remove(); camadaRotEstados.remove(); }
+    if (z >= 4) { if (!mapa.hasLayer(camadaEstados)) camadaEstados.addTo(mapa); }
+    else camadaEstados.remove();
   };
   mapa.on('zoomend', ajustaZoom); ajustaZoom();
 
@@ -448,13 +463,15 @@ function iniciaMapa() {
 let paisesVis = new Set(), paisesQuero = new Set(), estadosVis = new Set(), estadosQuero = new Set();
 function estiloPais(f) {
   const id = f.properties.id, v = paisesVis.has(id), q = !v && paisesQuero.has(id);
-  return { color: corToken('--map-border'), weight: 0.8, opacity: 0.9,
-    fillColor: v ? corToken('--visit') : q ? corToken('--want') : '#000', fillOpacity: v ? 0.42 : q ? 0.3 : 0 };
+  if (!v && !q) return { stroke: false, fill: false };
+  return { stroke: true, fill: true, color: v ? corToken('--visit') : corToken('--want'), weight: 1.2, opacity: 0.9,
+    fillColor: v ? corToken('--visit') : corToken('--want'), fillOpacity: v ? 0.16 : 0.14 };
 }
 function estiloEstado(f) {
   const id = f.properties.id, v = estadosVis.has(id), q = !v && estadosQuero.has(id);
-  return { color: corToken('--map-border'), weight: 0.5, opacity: 0.7, dashArray: '2 3',
-    fillColor: v ? corToken('--visit') : q ? corToken('--want') : '#000', fillOpacity: v ? 0.3 : q ? 0.2 : 0 };
+  if (!v && !q) return { stroke: false, fill: false };
+  return { stroke: true, fill: true, color: v ? corToken('--visit') : corToken('--want'), weight: 0.8, opacity: 0.8,
+    fillColor: v ? corToken('--visit') : corToken('--want'), fillOpacity: v ? 0.34 : 0.22 };
 }
 function desenhaPinos() {
   camadaPinos.clearLayers();
