@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
 <style>
 /* Layout: barra superior + contadores; mapa em cima e lista embaixo no celular, lista lateral no computador */
 :root {
@@ -88,6 +89,7 @@ button { cursor: pointer; }
 .painel-topo input { width: 46%; max-width: 200px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-size: .9rem; }
 .cab-rotulos { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 12px; justify-content: flex-start; min-width: 0; font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--surface-2); }
 .cab-rotulos span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cab-rotulos { gap: 4px 6px !important; }
 .cab-rotulos i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--c); flex: none; }
 .lista { overflow-y: auto; flex: 1; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
@@ -206,6 +208,19 @@ button { cursor: pointer; }
 .selo { font-size: .72rem; font-weight: 700; color: #fff; background: var(--c); border-radius: 99px; padding: 3px 8px; white-space: nowrap; }
 .menu-link { display: block; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); color: var(--accent); font-weight: 700; text-decoration: none; }
 .publico .busca, .publico .fab { display: none !important; }
+.grupo-pinos { background: none; border: 0; }
+.grupo-pinos div { width: 36px; height: 36px; border-radius: 50%; background: var(--visit); color: #fff; font: 700 13px/36px var(--f-body); text-align: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+.filtro-rot, .filtro-limpa { border: 1px solid transparent; background: none; color: var(--muted); font-size: .8rem; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 99px; }
+.filtro-rot[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; background: var(--surface); }
+.filtro-rot i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--c); }
+.filtro-rot[aria-pressed="true"] i { background: var(--c); }
+.filtro-limpa { color: var(--accent); font-weight: 700; }
+.conts { display: flex; gap: 12px; margin-top: 3px; font-size: .82rem; font-variant-numeric: tabular-nums; color: var(--ink); }
+.conts span { display: inline-flex; align-items: center; gap: 3px; min-width: 2.6em; }
+.conts span.zero { opacity: .3; }
+.conts svg { width: 13px; height: 13px; }
+.toast.com-acao { display: flex; gap: 14px; align-items: center; border-radius: 12px; }
+.toast button { border: 0; background: none; color: var(--accent); font-weight: 800; padding: 0; }
 .acoes { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 10px 16px; font-weight: 600; }
 .btn.principal { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
@@ -294,6 +309,7 @@ button { cursor: pointer; }
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
@@ -345,9 +361,17 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const bandeira = cc => (cc && /^[A-Z]{2}$/.test(cc)) ? String.fromCodePoint(...[...cc].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) : '🏳️';
-function toast(msg, ms = 2600) {
-  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t);
-  setTimeout(() => t.remove(), ms);
+function toast(msg, ms = 2600, acao) {
+  document.querySelectorAll('.toast.com-acao').forEach(x => x.remove());
+  const t = document.createElement('div'); t.className = 'toast' + (acao ? ' com-acao' : '');
+  t.textContent = msg;
+  if (acao) {
+    const b = document.createElement('button'); b.textContent = acao.rotulo;
+    b.onclick = () => { t.remove(); acao.fn(); };
+    t.appendChild(b);
+  }
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), acao ? Math.max(ms, 5000) : ms);
 }
 function distKm(a, b, c, d) {
   const R = 6371, r = Math.PI / 180, dLat = (c - a) * r, dLon = (d - b) * r;
@@ -454,6 +478,8 @@ async function alternaRotulo(lugarId, rotuloId) {
     const { error } = await supa.from('viagem_lugar_rotulos').delete().eq('lugar_id', lugarId).eq('rotulo_id', rotuloId);
     if (error) return toast('Não deu pra salvar: ' + error.message);
     m.delete(rotuloId); if (!m.size) S.lr.delete(lugarId);
+    const nomeL = S.lugares.find(x => x.id === lugarId)?.nome || 'lugar', nomeR = S.rotulos.find(r => r.id === rotuloId)?.nome || 'rótulo';
+    toast(`${nomeR} tirado de ${nomeL}`, 5000, { rotulo: 'Desfazer', fn: () => alternaRotulo(lugarId, rotuloId) });
   } else {
     const { error } = await supa.from('viagem_lugar_rotulos').insert({ lugar_id: lugarId, rotulo_id: rotuloId });
     if (error) return toast('Não deu pra salvar: ' + error.message);
@@ -622,7 +648,7 @@ function irParaMim(div) {
   }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 }
 function iniciaMapa() {
-  mapa = L.map('mapa', { preferCanvas: true, zoomControl: true, worldCopyJump: true, minZoom: 2, attributionControl: true })
+  mapa = L.map('mapa', { preferCanvas: true, maxZoom: 19, zoomControl: true, worldCopyJump: true, minZoom: 2, attributionControl: true })
     .setView([-12, -48], 4);
   colocaFundo();
   mapa.attributionControl.setPrefix(false);
@@ -630,7 +656,11 @@ function iniciaMapa() {
   camadaPaises = L.geoJSON(S.fcPaises, { style: estiloPais, interactive: false }).addTo(mapa);
   camadaEstados = L.geoJSON(S.fcEstados, { style: estiloEstado, interactive: false });
   camadaBase = L.layerGroup().addTo(mapa);
-  camadaPinos = L.layerGroup().addTo(mapa);
+  // pinos agrupados de longe (bolinha com o número), separados quando aproxima
+  camadaPinos = (L.markerClusterGroup ? L.markerClusterGroup({
+    maxClusterRadius: 42, disableClusteringAtZoom: 11, showCoverageOnHover: false, spiderfyOnMaxZoom: true,
+    iconCreateFunction: c => L.divIcon({ html: `<div>${c.getChildCount()}</div>`, className: 'grupo-pinos', iconSize: [36, 36] }),
+  }) : L.layerGroup()).addTo(mapa);
   L.control.localizar = criaBotaoLocalizar(); L.control.localizar.addTo(mapa);
 
   const ajustaZoom = () => {
@@ -671,9 +701,10 @@ const tiposDaAba = aba => ({ cidade: ['cidade'], unesco: ['unesco'], transporte:
 const abaDeRegiao = () => S.aba === 'paises' || S.aba === 'estados';
 function desenhaPinos() {
   camadaPinos.clearLayers();
-  const tipos = tiposDaAba(S.aba);
+  const tipos = tiposDaAba(S.aba), novos = [];
   for (const l of S.lugares) {
     if (!S.lr.has(l.id) || !tipos.includes(l.tipo)) continue;
+    if (S.filtroRot && !rotulosDe(l.id).has(S.filtroRot)) continue;
     const m = L.marker([l.lat, l.lon], {
       icon: L.divIcon({ className: `pino ${l.tipo}`, html: l.tipo === 'cidade'
         ? `<div class="band" style="--c:${corDoLugar(l.id)}">${bandeira(l.pais)}</div>`
@@ -683,8 +714,9 @@ function desenhaPinos() {
       title: l.nome,
     });
     m.on('click', () => abreLugar(l.id));
-    camadaPinos.addLayer(m);
+    novos.push(m);
   }
+  if (camadaPinos.addLayers) camadaPinos.addLayers(novos); else novos.forEach(m => camadaPinos.addLayer(m));
 }
 
 /* ================= Estatísticas e lista ================= */
@@ -744,7 +776,9 @@ function avisoMapa(n, total) {
 function renderLista() {
   const f = norm(S.filtro), aba = S.aba, visivel = noMapa();
   $('#cab-rotulos').hidden = aba === 'paises' || aba === 'estados';
-  $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? '' : S.rotulos.map(r => `<span><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</span>`).join('');
+  if (S.filtroRot && !S.rotulos.some(r => r.id === S.filtroRot)) S.filtroRot = null;
+  $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? '' : S.rotulos.map(r => `<button class="filtro-rot" data-filtro-rot="${r.id}" aria-pressed="${S.filtroRot === r.id}" title="Mostrar só ${esc(r.nome)}"><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</button>`).join('')
+    + (S.filtroRot ? '<button class="filtro-limpa" data-filtro-rot="">Mostrar todos</button>' : '');
   const titulos = { paises: 'Países', estados: 'Estados e províncias', transporte: 'Aeroportos e portos' };
   $('#painel-titulo').textContent = titulos[aba] || TIPOS[aba].nome;
   let html = '';
@@ -759,6 +793,9 @@ function renderLista() {
     }
     const UM = { cidade: 'cidade', unesco: 'UNESCO', aeroporto: 'aeroporto', porto: 'porto', atracao: 'atração', outro: 'outro lugar' };
     const VARIOS = { cidade: 'cidades', unesco: 'UNESCO', aeroporto: 'aeroportos', porto: 'portos', atracao: 'atrações', outro: 'outros lugares' };
+    // sempre as mesmas colunas, na mesma ordem; zero fica apagado
+    const COLS = [['cidade', 'Cidades'], ['unesco', 'UNESCO'], ['aeroporto', 'Aeroportos'], ['porto', 'Portos'], ['atracao', 'Atrações e parques']];
+    const resumoHtml = k => `<span class="conts">${COLS.map(([t, nome]) => { const n = det.get(k)?.[t] || 0; return `<span class="${n ? '' : 'zero'}" title="${nome}">${ICONES[t]}${n}</span>`; }).join('')}</span>`;
     const resumo = k => Object.keys(TIPOS).filter(t => det.get(k)?.[t]).map(t => `${det.get(k)[t]} ${det.get(k)[t] === 1 ? UM[t] : VARIOS[t]}`).join(' · ');
     if (aba === 'paises') {
       const porCont = new Map();
@@ -768,7 +805,7 @@ function renderLista() {
         const linhas = ids.filter(id => norm(nomePais(id)).includes(f)).sort((a, b) => nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
         if (!linhas.length) continue;
         html += `<div class="grupo"><span>${esc(ct)}</span><span>${ids.length} de ${totais.get(ct)}</span></div>`;
-        html += linhas.map(id => `<div class="item"><span class="bandeira">${bandeira(id)}</span><button class="txt" data-zoom-pais="${esc(id)}"><b>${esc(nomePais(id))}</b><small>${esc(resumo(id))}</small></button></div>`).join('');
+        html += linhas.map(id => `<div class="item"><span class="bandeira">${bandeira(id)}</span><button class="txt" data-zoom-pais="${esc(id)}"><b>${esc(nomePais(id))}</b>${resumoHtml(id)}</button></div>`).join('');
       }
     } else {
       const ids = [...cont.keys()].filter(id => norm(nomeEstado(id)).includes(f))
@@ -777,7 +814,7 @@ function renderLista() {
       for (const id of ids) {
         const p = S.estadoPorId.get(id)?.pais;
         if (p !== ult) { const n = ids.filter(x => S.estadoPorId.get(x)?.pais === p).length; html += `<div class="grupo"><span>${bandeira(p)} ${esc(nomePais(p))}</span><span>${n} de ${S.estados.filter(e => e.pais === p).length}</span></div>`; ult = p; }
-        html += `<div class="item"><span class="tipo">${ICONES.outro}</span><button class="txt" data-zoom-estado="${esc(id)}"><b>${esc(nomeEstado(id))}</b><small>${esc(resumo(id))}</small></button></div>`;
+        html += `<div class="item"><span class="tipo">${ICONES.outro}</span><button class="txt" data-zoom-estado="${esc(id)}"><b>${esc(nomeEstado(id))}</b>${resumoHtml(id)}</button></div>`;
       }
     }
     if (html) html = avisoMapa(cont.size, totalK.size) + html;
@@ -785,12 +822,12 @@ function renderLista() {
     if (!html) html = `<div class="vazio-lista"><b>Nenhum ${aba === 'paises' ? 'país' : 'estado'} ainda</b>Marque lugares como “${esc(S.rotulos.find(r => r.conta_como_visita)?.nome || 'Estive')}” e eles aparecem aqui.</div>`;
   } else {
     const tipos = aba === 'transporte' ? ['aeroporto', 'porto'] : [aba];
-    const todos = S.lugares.filter(l => tipos.includes(l.tipo) && (!f || norm(l.nome + ' ' + nomeEstado(l.estado) + ' ' + nomePais(l.pais)).includes(f)));
+    const todos = S.lugares.filter(l => tipos.includes(l.tipo) && (!S.filtroRot || rotulosDe(l.id).has(S.filtroRot)) && (!f || norm(l.nome + ' ' + nomeEstado(l.estado) + ' ' + nomePais(l.pais)).includes(f)));
     const ls = todos.filter(visivel).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     html = avisoMapa(ls.length, todos.length) + ls.map(linhaLugar).join('');
     if (!ls.length && todos.length) html += '<div class="vazio-lista" style="padding:14px 20px"><b>Nenhum marcado nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     // itens da base ainda não marcados, na parte do mapa que está na tela
-    const base = S.publico ? [] : basePorAba(aba);
+    const base = S.publico || S.filtroRot ? [] : basePorAba(aba);
     if (base.length) {
       const z = mapa ? mapa.getZoom() : 2;
       const outros = base.filter(b => !lugarDaRef(b.ref) && visivel(b) && (!f || norm(b.nome + ' ' + b.sub).includes(f)) && (aba !== 'transporte' || b.grande || z >= 6 || f) && (aba !== 'atracao' || !ehParque(b) || z >= 5 || f));
@@ -1024,9 +1061,18 @@ function abreLugar(id) {
       atualizaTudo(); toast('Salvo'); return id;
     },
     aoExcluir: async () => {
+      // guarda tudo antes de apagar, para o Desfazer recriar igual
+      const copia = { ...l }, rots = [...rotulosDe(id).keys()], vis = visitasDe(id).map(v => ({ ...v }));
       const { error } = await supa.from('viagem_lugares').delete().eq('id', id);
       if (error) return toast('Erro ao excluir: ' + error.message);
-      S.lugares = S.lugares.filter(x => x.id !== id); S.lr.delete(id); atualizaTudo(); toast(`${l.nome} excluído`);
+      S.lugares = S.lugares.filter(x => x.id !== id); S.lr.delete(id); S.visitas = (S.visitas || []).filter(v => v.lugar_id !== id); atualizaTudo();
+      toast(`${l.nome} excluído`, 6000, { rotulo: 'Desfazer', fn: async () => {
+        const { user_id, criado_em, ...reg } = copia;
+        const { error: e1 } = await supa.from('viagem_lugares').insert(reg); if (e1) return toast('Não deu pra desfazer: ' + e1.message);
+        if (rots.length) await supa.from('viagem_lugar_rotulos').insert(rots.map(r => ({ lugar_id: id, rotulo_id: r })));
+        if (vis.length) await supa.from('viagem_visitas').insert(vis.map(v => ({ lugar_id: id, data: v.data, precisao: v.precisao, nota: v.nota || null })));
+        await carregaDados(); atualizaTudo(); toast(`${copia.nome} voltou`);
+      } });
     },
   });
 }
@@ -1475,6 +1521,43 @@ function abreMenuPublico() {
   });
 }
 
+/* ================= Backup ================= */
+function baixarArquivo(nome, conteudo, tipo) {
+  const url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
+  const a = document.createElement('a'); a.href = url; a.download = nome; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+function abreBackup() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  abreModal(`
+    <h3>Baixar meus dados</h3>
+    <p>Uma cópia de tudo o que você marcou: lugares, rótulos, datas e notas. Guarde no Drive ou no computador.</p>
+    <div class="menu-lista">
+      <button id="bk-csv">Planilha (CSV)<small>Abre no Excel e no Google Planilhas</small></button>
+      <button id="bk-json">Cópia completa (JSON)<small>Serve para restaurar tudo no app depois</small></button>
+    </div>
+    <div class="acoes"><button class="btn" id="bk-fechar">Fechar</button></div>`, (m, fechar) => {
+    m.querySelector('#bk-fechar').onclick = fechar;
+    m.querySelector('#bk-json').onclick = () => {
+      const dados = { app: 'Por Onde Andei', versao: 1, gerado_em: new Date().toISOString(), rotulos: S.rotulos, lugares: S.lugares,
+        marcas: [...S.lr].flatMap(([l, mm]) => [...mm.keys()].map(r => ({ lugar_id: l, rotulo_id: r }))), visitas: S.visitas || [] };
+      baixarArquivo(`por-onde-andei-${hoje}.json`, JSON.stringify(dados, null, 2), 'application/json');
+      toast('Cópia baixada');
+    };
+    m.querySelector('#bk-csv').onclick = () => {
+      const c = v => { const t = String(v ?? ''); return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+      const linhas = [['Tipo', 'Nome', 'Estado', 'País', 'Rótulos', 'Visitas', 'Notas', 'Latitude', 'Longitude', 'Referência'].join(';')];
+      for (const l of [...S.lugares].sort((a, b) => (a.pais || '').localeCompare(b.pais || '') || (a.estado || '').localeCompare(b.estado || '') || a.nome.localeCompare(b.nome, 'pt-BR'))) {
+        const rots = S.rotulos.filter(r => rotulosDe(l.id).has(r.id)).map(r => r.nome).join(', ');
+        const vis = visitasDe(l.id).reverse().map(fmtVisita).join(', ');
+        linhas.push([ehParque(l) ? 'Parque nacional' : TIPOS[l.tipo].um, l.nome, nomeEstado(l.estado), nomePais(l.pais), rots, vis, l.notas, l.lat, l.lon, l.ref_externa].map(c).join(';'));
+      }
+      baixarArquivo(`por-onde-andei-${hoje}.csv`, '\uFEFF' + linhas.join('\r\n'), 'text/csv;charset=utf-8');
+      toast('Planilha baixada');
+    };
+  });
+}
+
 /* ================= Menu ================= */
 function abreMenu() {
   abreModal(`
@@ -1484,6 +1567,7 @@ function abreMenu() {
       <button id="m-band">Bandeiras<small>Sua coleção de países</small></button>
       <button id="m-tempo">Linha do tempo<small>Suas visitas por ano e mês</small></button>
       <button id="m-comp">Compartilhar meu mapa<small>Link só de leitura para amigos e família</small></button>
+      <button id="m-backup">Baixar meus dados<small>Cópia em planilha ou arquivo completo</small></button>
       <button id="m-rot">Rótulos<small>Criar, renomear, mudar cor</small></button>
       <button id="m-imp">Importar do Places Been<small>Arquivo CSV exportado do app</small></button>
       <button id="m-tudo">Ver todos os meus lugares no mapa</button>
@@ -1494,6 +1578,7 @@ function abreMenu() {
     m.querySelector('#m-est').onclick = () => { fechar(); abreEstatisticas(); };
     m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); };
     m.querySelector('#m-comp').onclick = () => { fechar(); abreCompartilhar(); };
+    m.querySelector('#m-backup').onclick = () => { fechar(); abreBackup(); };
     m.querySelector('#m-imp').onclick = () => { fechar(); abreImportacao(); };
     m.querySelector('#m-tudo').onclick = () => { fechar(); const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); };
     m.querySelector('#m-sair').onclick = async () => { await supa.auth.signOut(); location.reload(); };
@@ -1571,6 +1656,11 @@ function montaApp() {
     const ze = e.target.closest('[data-zoom-estado]'); if (ze) { const p = S.estadoPorId.get(ze.dataset.zoomEstado); if (p) mapa.fitBounds([[p.bbox[1], p.bbox[0]], [p.bbox[3], p.bbox[2]]]); }
   });
   $('#filtro').addEventListener('input', e => { S.filtro = e.target.value; renderLista(); });
+  $('#cab-rotulos').addEventListener('click', e => {
+    const b = e.target.closest('[data-filtro-rot]'); if (!b) return;
+    S.filtroRot = b.dataset.filtroRot && S.filtroRot !== b.dataset.filtroRot ? b.dataset.filtroRot : null;
+    atualizaTudo();
+  });
   $('#btn-menu').onclick = S.publico ? abreMenuPublico : abreMenu;
   if (S.publico) return;
   $('#busca').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.value.trim().length > 1) buscar(e.target.value.trim()); if (e.key === 'Escape') $('#resultados').hidden = true; });
