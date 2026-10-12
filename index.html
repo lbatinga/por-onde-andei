@@ -194,6 +194,19 @@ button { cursor: pointer; }
 .ano b { text-align: right; } .ano-barra { height: 10px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
 .ano-barra div { height: 100%; background: var(--visit); border-radius: 99px; }
 .casa-campo { margin-bottom: 6px; }
+[data-st-sec] h4 { margin: 20px 0 8px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+[data-st-sec] h4:first-child { margin-top: 12px; }
+[data-st-sec] h5 { margin: 16px 0 6px; }
+[data-st-sec] .barra { margin-bottom: 8px; }
+.st-abas { margin: 10px 0 4px; position: sticky; top: -1px; z-index: 2; }
+.aero-lista { display: grid; gap: 0; margin: 4px 0 6px; }
+.aero-linha { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.aero-linha:last-child { border-bottom: 0; }
+.sigla { font: 700 .78rem/1 var(--f-display); letter-spacing: .04em; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; min-width: 3.4em; text-align: center; }
+.aero-nome { flex: 1; min-width: 0; font-size: .92rem; }
+.aero-pos { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.aero-pos > span { font-size: .8rem; font-weight: 700; background: var(--surface-2); border-radius: 99px; padding: 3px 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.aero-pos .fora { font-weight: 500; color: var(--muted); background: none; }
 .barra-topo { display: flex; justify-content: space-between; font-size: .9rem; }
 .barra-topo b { font-variant-numeric: tabular-nums; } .barra-topo small { color: var(--muted); font-weight: 400; }
 .barra-fundo { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
@@ -2086,16 +2099,7 @@ function abreEstatisticas() {
   const NOMES_T = { cidade: 'Cidades', unesco: 'Patrimônios UNESCO', aeroporto: 'Aeroportos', porto: 'Portos', atracao: 'Atrações', parque: 'Parques nacionais', outro: 'Outros lugares' };
   const porRot = S.rotulos.map(r => [r, S.lugares.filter(l => rotulosDe(l.id).has(r.id)).length]);
   const capitais = CAPITAIS.filter(c => ibgeVis.has(c)).length;
-  // por ano: ano da primeira visita de cada lugar visitado
-  const primeira = new Map();
-  for (const v of S.visitas || []) { if (!visitado(v.lugar_id, vis)) continue; const a = primeira.get(v.lugar_id); if (!a || v.data < a) primeira.set(v.lugar_id, v.data); }
-  const porAno = new Map(); for (const d of primeira.values()) { const a = d.slice(0, 4); porAno.set(a, (porAno.get(a) || 0) + 1); }
-  const anos = [...porAno].sort((a, b) => a[0].localeCompare(b[0])), maxAno = Math.max(1, ...porAno.values());
-  const melhor = [...porAno].sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0];
-  const porLugar = new Map(S.lugares.map(l => [l.id, l]));
-  const c0 = casa(), paisCasa = c0?.pais || 'BR';
-  const intl = [...primeira].filter(([id]) => porLugar.get(id)?.pais && porLugar.get(id).pais !== paisCasa).sort((a, b) => a[1].localeCompare(b[1]))[0];
-  const semData = visitados.length - primeira.size;
+  const c0 = casa();
   const longe = c0 ? visitados.filter(l => l.id !== c0.id).map(l => [l, distKm(c0.lat, c0.lon, l.lat, l.lon)]).sort((a, b) => b[1] - a[1])[0] : null;
   const opcoesCasa = (() => {
     const morei = S.rotulos.find(r => norm(r.nome) === 'morei');
@@ -2110,37 +2114,50 @@ function abreEstatisticas() {
       <div><b>${contsVis.length}</b><span>de ${conts.size} continentes</span></div>
     </div>
     <p class="meta">A área soma cada estado ou província onde você esteve, inteiro: passar por Manaus conta o Amazonas todo. É o mesmo critério do Places Been.</p>
-    <h4>Por continente</h4>
-    ${contsVis.sort((a, b) => b[1][0] - a[1][0]).map(([c, [v, t]]) => barra(c, v, t)).join('')}
-    ${faltam.length ? `<p class="meta">Faltam ${faltam.length}: ${esc(faltam.join(', '))}.</p>` : '<p class="meta">Todos os continentes!</p>'}
-    <h4>Brasil</h4>
-    ${barra('Estados', ufsBR.size, 27)}${barra('Capitais', capitais, 27)}<div id="st-mun-total"></div>
-    <h5>Por região</h5>
-    ${Object.entries(REGIOES_BR).map(([r, ufs]) => barra(r, ufs.filter(u => ufsBR.has(u)).length, ufs.length)).join('')}
-    <h5>Municípios por estado</h5><div id="st-mun-uf"><p class="meta">Carregando…</p></div>
-    <h5>Patrimônios da UNESCO no Brasil</h5><div id="st-unesco"><p class="meta">Carregando…</p></div>
-    <h4>Aeroportos</h4><div id="st-aero"><p class="meta">Carregando…</p></div>
-    ${anos.length ? `<h4>Por ano</h4><p class="meta">Lugares visitados pela primeira vez em cada ano${semData ? ` (${semData} ainda sem data ficam de fora)` : ''}.</p>
-      <div class="anos">${anos.map(([a, n]) => `<div class="ano"><span>${a}</span><div class="ano-barra"><div style="width:${Math.round(100 * n / maxAno)}%"></div></div><b>${n}</b></div>`).join('')}</div>
-      <div class="tabela">${melhor ? `<span>Melhor ano</span><b>${melhor[0]} · ${num(melhor[1])} ${melhor[1] === 1 ? 'lugar' : 'lugares'}</b>` : ''}
-      ${intl ? `<span>Primeira vez fora do país</span><b>${esc(nomePais(porLugar.get(intl[0]).pais))} · ${esc(nomeMes(intl[1].slice(0, 7)))}</b>` : ''}</div>` : ''}
-    ${(S.viagens || []).length ? `<h4>Viagens</h4><div class="tabela">
+    <div class="abas-band st-abas" role="tablist">
+      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="brasil">Brasil</button><button role="tab" data-st="aero">Aeroportos</button><button role="tab" data-st="viagens">Viagens</button>
+    </div>
+    <section data-st-sec="geral">
+      <h4>Por continente</h4>
+      ${contsVis.sort((a, b) => b[1][0] - a[1][0]).map(([c, [v, t]]) => barra(c, v, t)).join('')}
+      ${faltam.length ? `<p class="meta">Faltam ${faltam.length}: ${esc(faltam.join(', '))}.</p>` : '<p class="meta">Todos os continentes!</p>'}
+      <h4>Distâncias</h4>
+      ${S.publico ? '' : `<div class="campo casa-campo"><label for="st-casa">Sua casa</label><select id="st-casa"><option value="">Escolha a cidade</option>${opcoesCasa}</select></div>`}
+      <div class="tabela">
+        ${longe ? `<span>Mais longe de casa</span><b>${esc(longe[0].nome)} · ${fmtKm(Math.round(longe[1]))}</b>` : ''}
+        ${norte ? `<span>Cidade mais ao norte</span><b>${esc(norte.nome)}</b><span>Mais ao sul</span><b>${esc(sul.nome)}</b>
+        <span>Mais a leste</span><b>${esc(leste.nome)}</b><span>Mais a oeste</span><b>${esc(oeste.nome)}</b>` : ''}</div>
+      <h4>O que você já marcou</h4>
+      <div class="tabela">${Object.keys(NOMES_T).filter(t => porTipo[t]).map(t => `<span>${NOMES_T[t]}</span><b>${num(porTipo[t])}</b>`).join('')}
+        ${porRot.map(([r, n]) => `<span><i class="bolinha" style="background:${esc(r.cor)}"></i>${esc(r.nome)}</span><b>${num(n)}</b>`).join('')}</div>
+    </section>
+    <section data-st-sec="brasil" hidden>
+      <h4>No país</h4>
+      ${barra('Estados', ufsBR.size, 27)}${barra('Capitais', capitais, 27)}<div id="st-mun-total"></div>
+      <h4>Por região</h4>
+      ${Object.entries(REGIOES_BR).map(([r, ufs]) => barra(r, ufs.filter(u => ufsBR.has(u)).length, ufs.length)).join('')}
+      <h4>Municípios por estado</h4><div id="st-mun-uf"><p class="meta">Carregando…</p></div>
+      <h4>Patrimônios da UNESCO</h4><div id="st-unesco"><p class="meta">Carregando…</p></div>
+    </section>
+    <section data-st-sec="aero" hidden><div id="st-aero"><p class="meta">Carregando…</p></div></section>
+    <section data-st-sec="viagens" hidden>
+    ${(S.viagens || []).length ? `<div class="tabela">
       <span>Viagens registradas</span><b>${num(S.viagens.length)}</b>
       <span>Distância percorrida (linha reta)</span><b>${fmtKm(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0))}</b>
       ${(() => { const maior = [...S.viagens].sort((a, b) => kmViagem(b.id) - kmViagem(a.id))[0]; return maior ? `<span>Mais longa: ${esc(maior.nome)}</span><b>${fmtKm(kmViagem(maior.id))}</b>` : ''; })()}
-      <span>Voltas na Terra</span><b>${(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0) / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b>
-      ${(() => { const tot = kmPorTransporte(); return [...Object.keys(TRANSPORTES), 'local', 'sem'].filter(k => tot.get(k) >= 0.5).map(k => `<span>${k === 'sem' ? 'Trechos sem transporte marcado' : k === 'local' ? 'Trajetos até aeroportos e portos' : TRANSPORTES[k].join(' ')}</span><b>${fmtKm(Math.round(tot.get(k)))}</b>`).join(''); })()}</div>` : ''}
-    <h4>Distâncias</h4>
-    ${S.publico ? '' : `<div class="campo casa-campo"><label for="st-casa">Sua casa</label><select id="st-casa"><option value="">Escolha a cidade</option>${opcoesCasa}</select></div>`}
-    <div class="tabela">
-      ${longe ? `<span>Mais longe de casa</span><b>${esc(longe[0].nome)} · ${fmtKm(Math.round(longe[1]))}</b>` : ''}
-      ${norte ? `<span>Cidade mais ao norte</span><b>${esc(norte.nome)}</b><span>Mais ao sul</span><b>${esc(sul.nome)}</b>
-      <span>Mais a leste</span><b>${esc(leste.nome)}</b><span>Mais a oeste</span><b>${esc(oeste.nome)}</b>` : ''}</div>
-    <h4>O que você já marcou</h4>
-    <div class="tabela">${Object.keys(NOMES_T).filter(t => porTipo[t]).map(t => `<span>${NOMES_T[t]}</span><b>${num(porTipo[t])}</b>`).join('')}
-      ${porRot.map(([r, n]) => `<span><i class="bolinha" style="background:${esc(r.cor)}"></i>${esc(r.nome)}</span><b>${num(n)}</b>`).join('')}</div>
+      <span>Voltas na Terra</span><b>${(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0) / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b></div>
+      <h4>Por meio de transporte</h4><div class="tabela">
+      ${(() => { const tot = kmPorTransporte(); return [...Object.keys(TRANSPORTES), 'local', 'sem'].filter(k => tot.get(k) >= 0.5).map(k => `<span>${k === 'sem' ? 'Trechos sem transporte marcado' : k === 'local' ? 'Trajetos até aeroportos e portos' : TRANSPORTES[k].join(' ')}</span><b>${fmtKm(Math.round(tot.get(k)))}</b>`).join(''); })()}</div>` : '<p class="meta">Nenhuma viagem registrada ainda. Crie em Menu › Viagens.</p>'}
+    </section>
     <div class="acoes"><button class="btn" id="st-fechar">Fechar</button></div>`, (m, fechar) => {
     m.querySelector('#st-fechar').onclick = fechar;
+    const mostraAba = aba => {
+      m.querySelectorAll('[data-st]').forEach(b => b.setAttribute('aria-selected', b.dataset.st === aba));
+      m.querySelectorAll('[data-st-sec]').forEach(sec => sec.hidden = sec.dataset.stSec !== aba);
+      try { localStorage.setItem('poa-st-aba', aba); } catch {}
+    };
+    m.querySelectorAll('[data-st]').forEach(b => b.onclick = () => mostraAba(b.dataset.st));
+    mostraAba((() => { try { return localStorage.getItem('poa-st-aba') || 'geral'; } catch { return 'geral'; } })());
     const sel = m.querySelector('#st-casa');
     if (sel) sel.onchange = async () => { await salvaCasa(sel.value); fechar(); abreEstatisticas(); };
     // municípios (lista do IBGE) e UNESCO (base) chegam depois
@@ -2160,8 +2177,17 @@ function abreEstatisticas() {
         .map(l => ({ l, iata: l.ref_externa.slice(5) })).map(x => ({ ...x, br: posBR.get(x.iata), mundo: posMundo.get(x.iata) }))
         .sort((a, b) => (a.mundo || 999) - (b.mundo || 999) || (a.br || 999) - (b.br || 999) || a.l.nome.localeCompare(b.l.nome, 'pt-BR'));
       if (!meus.length) { box.innerHTML = '<p class="meta">Nenhum aeroporto marcado ainda.</p>'; return; }
-      box.innerHTML = `<div class="tabela">${meus.map(x => `<span>${esc(x.l.nome)}</span><b>${[x.mundo ? `${x.mundo}º mundo` : '', x.br ? `${x.br}º Brasil` : ''].filter(Boolean).join(' · ') || 'fora do top 50'}</b>`).join('')}</div>
-        <p class="meta">Mundo: top 50 do ACI ${rk.mundo.ano}. Brasil: ANAC ${rk.brasil.ano}.</p>`;
+      const curto = n => n.replace(/\s*\([A-Z]{3}\)\s*$/, '').replace(/^Aeroporto\s+(Internacional\s+)?((de|do|da|dos)\s+)?/i, '');
+      const top = (lista, n) => lista.filter(x => x <= n).length;
+      const mundos = meus.map(x => x.mundo).filter(Boolean), brs = meus.map(x => x.br).filter(Boolean);
+      box.innerHTML = `<div class="destaques">
+          <div><b>${top(mundos, 50)}</b><span>no top 50 do mundo</span></div>
+          <div><b>${top(brs, 10)}</b><span>no top 10 do Brasil</span></div>
+          <div><b>${meus.length}</b><span>aeroportos seus</span></div>
+        </div>
+        <div class="aero-lista">${meus.map(x => `<div class="aero-linha"><span class="sigla">${esc(x.iata)}</span><span class="aero-nome">${esc(curto(x.l.nome))}</span>
+          <span class="aero-pos">${x.mundo ? `<span title="Posição no mundo">🌎 ${x.mundo}º</span>` : ''}${x.br ? `<span title="Posição no Brasil">🇧🇷 ${x.br}º</span>` : ''}${!x.mundo && !x.br ? '<span class="fora">fora do top 50</span>' : ''}</span></div>`).join('')}</div>
+        <p class="meta">🌎 top 50 do ACI ${rk.mundo.ano} · 🇧🇷 ANAC ${rk.brasil.ano}</p>`;
     }).catch(() => { const box = m.querySelector('#st-aero'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar o ranking.</p>'; });
     carregaBase('unesco').then(base => {
       const box = m.querySelector('#st-unesco'); if (!box) return;
@@ -2169,8 +2195,8 @@ function abreEstatisticas() {
       const feitos = new Set(S.lugares.filter(l => l.tipo === 'unesco' && visitado(l.id, vis)).map(l => l.ref_externa));
       const falta = br.filter(b => !feitos.has(b.ref));
       const perto = c0 ? falta.map(b => [b, distKm(c0.lat, c0.lon, b.lat, b.lon)]).sort((a, b) => a[1] - b[1]).slice(0, 3) : [];
-      box.innerHTML = barra('Patrimônios', br.length - falta.length, br.length)
-        + (perto.length ? `<p class="meta">Mais perto de casa que faltam:</p><div class="tabela">${perto.map(([b, d]) => `<span>${esc(b.nome)}</span><b>${fmtKm(Math.round(d))}</b>`).join('')}</div>` : '');
+      box.innerHTML = barra('Visitados', br.length - falta.length, br.length)
+        + (perto.length ? `<h5>Os que faltam mais perto de casa</h5><div class="aero-lista">${perto.map(([b, d]) => `<div class="aero-linha"><span class="aero-nome">${esc(b.nome)}</span><span class="aero-pos"><span>${fmtKm(Math.round(d))}</span></span></div>`).join('')}</div>` : '');
     }).catch(() => { const box = m.querySelector('#st-unesco'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar a lista da UNESCO.</p>'; });
   });
 }
