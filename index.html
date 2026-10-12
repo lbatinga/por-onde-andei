@@ -1549,11 +1549,13 @@ function ligaResultados(box, mundo) {
 const PALAVRAS_VAZIAS = new Set(['de', 'do', 'da', 'dos', 'das', 'e', 'o', 'a', 'museu', 'casa', 'memorial', 'centro', 'cultural', 'espaco', 'municipal', 'historico', 'historica']);
 const palavras = t => new Set(norm(t).split(/[^a-z0-9]+/).filter(w => w.length > 2 && !PALAVRAS_VAZIAS.has(w)));
 async function confereMuseuOficial(d) {
-  if (d.pais !== 'BR' || !['museu', 'atracao'].includes(d.tipo)) return true;
+  // só pergunta quando o resultado parece museu (tipo museu ou nome de museu); praça, parque etc. não
+  const pareceMuseu = d.tipo === 'museu' || /\b(museu|museo|memorial|pinacoteca|galeria)\b/.test(norm(d.nome));
+  if (d.pais !== 'BR' || !['museu', 'atracao'].includes(d.tipo) || !pareceMuseu) return true;
   let base; try { base = await carregaBase('museu'); } catch { return true; }
   const minhas = palavras(d.nome);
   const cands = base.map(b => ({ b, km: distKm(d.lat, d.lon, b.lat, b.lon), comuns: [...palavras(b.nome)].filter(w => minhas.has(w)).length }))
-    .filter(c => c.km < 3 && (c.comuns > 0 || c.km < 0.3)).sort((a, b) => b.comuns - a.comuns || a.km - b.km).slice(0, 4);
+    .filter(c => c.km < 3 && (c.comuns > 0 || (d.tipo === 'museu' && c.km < 0.3))).sort((a, b) => b.comuns - a.comuns || a.km - b.km).slice(0, 4);
   if (!cands.length) return true;
   return new Promise(ok => {
     const fechar = abreModal(`<h3>Este museu está no cadastro oficial?</h3>
