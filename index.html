@@ -671,7 +671,8 @@ async function municipiosDaBase(l) {
   if (!/^(unesco|parque):/.test(l.ref_externa || '')) return [];
   let { data, error } = await supa.from('viagem_base_municipios').select('nome,ibge,lat,lon,pais').eq('ref', l.ref_externa);
   if (error || !data?.length) return [];
-  data = data.filter(x => !(x.pais === 'BR' && !x.ibge)); // no Brasil, só município de verdade
+  // descarta o que não é município: sem país (entidade histórica), o próprio país, e no Brasil o que não tem código IBGE
+  data = data.filter(x => x.pais && norm(x.nome) !== norm(nomePais(x.pais) || '') && !(x.pais === 'BR' && !x.ibge));
   if (data.some(x => x.ibge)) await carregaMunicipios().catch(() => {});
   const vistos = new Set();
   return data.map(x => {
@@ -682,20 +683,40 @@ async function municipiosDaBase(l) {
   }).filter(c => { const k = c.ref || norm(c.nome); if (vistos.has(k)) return false; vistos.add(k); return true; })
     .sort((a, b) => distKm(a.lat, a.lon, l.lat, l.lon) - distKm(b.lat, b.lon, l.lat, l.lon));
 }
-function escolheMunicipios(l, cands, rot) {
+function escolheMunicipios(l, cands, rot, depois) {
   const ja = c => { const e = cidadeExistente(c); return e && visitado(e.id); };
   const algumJa = cands.some(ja);
+  const varios = new Set(cands.map(c => c.pais)).size > 1;
   abreModal(`<h3>Por quais cidades você passou?</h3>
-    <p class="meta">${esc(l.nome)} fica em ${cands.length} municípios. Marque só os que você visitou.</p>
+    <p class="meta">${esc(l.nome)} fica em ${cands.length} municípios${new Set(cands.map(c => c.pais)).size > 1 ? ` de ${new Set(cands.map(c => c.pais)).size} países` : ''}. Marque só os que você visitou.</p>
     <div class="escolha-mun">${cands.map((c, i) => `<label><input type="checkbox" data-i="${i}" ${ja(c) ? 'checked disabled' : (!algumJa && i === 0 ? 'checked' : '')}>
-      <span><b>${esc(c.nome)}</b><small>${esc(nomeEstado(c.estado) || nomePais(c.pais))}${ja(c) ? ' · já marcada' : ''}</small></span></label>`).join('')}</div>
+      <span><b>${esc(c.nome)}</b><small>${esc([nomeEstado(c.estado), varios ? nomePais(c.pais) : null].filter(Boolean).join(', ') || nomePais(c.pais))}${ja(c) ? ' · já marcada' : ''}</small></span></label>`).join('')}</div>
     <div class="acoes"><button class="btn" id="em-nenhuma">Nenhuma</button><button class="btn principal" id="em-ok">Marcar</button></div>`, (m, fechar) => {
     m.querySelector('#em-nenhuma').onclick = fechar;
     m.querySelector('#em-ok').onclick = async ev => {
       ev.target.disabled = true;
       const escolhidos = [...m.querySelectorAll('input[data-i]:checked:not(:disabled)')].map(x => cands[+x.dataset.i]);
       const feitas = []; for (const c of escolhidos) feitas.push(await marcaCandidato(c, rot));
+      if (depois) await depois(escolhidos);
       fechar(); avisaMarcadas(feitas, rot);
+    };
+  });
+}
+async function mudaPaisDoLugar(l, pais, estado) {
+  if (!pais || (l.pais === pais && (!estado || l.estado === estado))) return;
+  const mud = { pais, estado: estado || null };
+  const { error } = await grava({ tipo: 'atualizar', tabela: 'viagem_lugares', valores: mud, filtro: { id: l.id } });
+  if (!error) { Object.assign(l, mud); atualizaTudo(); }
+}
+function escolhePais(l, paises) {
+  abreModal(`<h3>Em qual país você visitou?</h3>
+    <p class="meta">${esc(l.nome)} fica em ${paises.length} países. O país escolhido é o que conta no seu mapa.</p>
+    <div class="escolha-mun">${paises.map((p, i) => `<label><input type="radio" name="ep" value="${esc(p)}" ${p === l.pais ? 'checked' : ''}><span><b>${bandeira(p)} ${esc(nomePais(p) || p)}</b></span></label>`).join('')}</div>
+    <div class="acoes"><button class="btn principal" id="ep-ok">Pronto</button></div>`, (m, fechar) => {
+    m.querySelector('#ep-ok').onclick = async () => {
+      const p = m.querySelector('input[name=ep]:checked')?.value;
+      if (p && p !== l.pais) { const c = S.paises.find(x => x.id === p); await mudaPaisDoLugar(l, p, null); if (c) toast(`${l.nome} contando em ${nomePais(p)}`); }
+      fechar();
     };
   });
 }
@@ -706,6 +727,12 @@ async function marcaCidadeDe(lugarId) {
   const rot = rotuloVisitaPadrao(); if (!rot) return;
   try {
     const cands = await municipiosDaBase(l);
+    const paises = acharBase(l.ref_externa || '')?.paises || [];
+    if (paises.length > 1) {
+      // o ponto do patrimônio cai num país só; quem decide o país é por onde você passou
+      if (cands.length) return escolheMunicipios(l, cands, rot, async esc => { if (esc[0]) await mudaPaisDoLugar(l, esc[0].pais, esc[0].estado); });
+      return escolhePais(l, paises);
+    }
     if (cands.length >= 2) return escolheMunicipios(l, cands, rot);
     if (cands.length === 1) return avisaMarcadas([await marcaCandidato(cands[0], rot)], rot);
     // sem lista: o município do ponto, pelo mapa
@@ -742,7 +769,7 @@ const fundoCat = cat => cat === 'misto' ? 'linear-gradient(135deg,#2563eb 50%,#1
 let basePromessa = {};
 function carregaBase(tipo) {
   if (tipo === 'unesco') return basePromessa.unesco ||= todos(() => supa.from('viagem_unesco').select('whs,nome,lat,lon,paises,categoria').order('whs'))
-    .then(rows => (S.baseUnesco = semDuplicados(rows.map(r => ({ ref: 'unesco:' + r.whs, tipo: 'unesco', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.paises?.[0] || null, cat: r.categoria || 'cultural', sub: [CATEGORIAS[r.categoria || 'cultural'].nome, (r.paises || []).map(nomePais).join(', ')].filter(Boolean).join(' · ') })))))
+    .then(rows => (S.baseUnesco = semDuplicados(rows.map(r => ({ ref: 'unesco:' + r.whs, tipo: 'unesco', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.paises?.[0] || null, paises: r.paises || [], cat: r.categoria || 'cultural', sub: [CATEGORIAS[r.categoria || 'cultural'].nome, (r.paises || []).map(nomePais).join(', ')].filter(Boolean).join(' · ') })))))
     .catch(e => { basePromessa.unesco = null; throw e; });
   if (tipo === 'atracao') return basePromessa.atr ||= todos(() => supa.from('viagem_atracoes').select('qid,tipo,nome,lat,lon,pais,relevancia').or(`tipo.eq.parque,relevancia.gte.${FAMA_MINIMA}`).order('relevancia', { ascending: false }))
     .then(rows => (S.baseAtr = semDuplicados(rows.map(r => ({ ref: (r.tipo === 'parque' ? 'parque:' : 'wd:') + r.qid, tipo: 'atracao', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.pais, grande: r.relevancia >= 60 ? 1 : 0, rel: r.relevancia, sub: [r.tipo === 'parque' ? 'Parque nacional' : 'Atração', nomePais(r.pais)].filter(Boolean).join(' · ') })))))
