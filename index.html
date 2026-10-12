@@ -16,22 +16,13 @@
 /* Layout: barra superior + contadores; mapa em cima e lista embaixo no celular, lista lateral no computador */
 :root {
   --bg: #eef2f1; --surface: #ffffff; --surface-2: #f6f8f8; --ink: #10292c; --muted: #5b6f71; --line: #d8e1e0;
-  --primary: #123a3f; --on-primary: #f2e8d5; --accent: #e4572e; --visit: #2a9d8f; --want: #e9b949;
+  --primary: #123a3f; --on-primary: #f2e8d5; --accent: #e4572e; --visit: #0f8b7d; --want: #e9b949;
   --map-bg: #dfe8e7; --map-border: #9fb3b2; --danger: #c2372b;
   --f-display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
   --f-body: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --r: 10px;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0b1719; --surface: #122326; --surface-2: #0f1e20; --ink: #e4eeed; --muted: #8fa5a6; --line: #22393c;
-  --primary: #0e2c30; --on-primary: #f2e8d5; --accent: #f06a43; --visit: #33b5a5; --want: #e9b949;
-  --map-bg: #13272a; --map-border: #3d5b5d; --danger: #ef6b5e; color-scheme: dark; } }
-:root[data-theme="dark"] {
-  --bg: #0b1719; --surface: #122326; --surface-2: #0f1e20; --ink: #e4eeed; --muted: #8fa5a6; --line: #22393c;
-  --primary: #0e2c30; --on-primary: #f2e8d5; --accent: #f06a43; --visit: #33b5a5; --want: #e9b949;
-  --map-bg: #13272a; --map-border: #3d5b5d; --danger: #ef6b5e; color-scheme: dark; }
-
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--f-body); -webkit-tap-highlight-color: transparent; }
@@ -89,8 +80,6 @@ button { cursor: pointer; }
 .lista { overflow-y: auto; flex: 1; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
 .item .tipo { width: 30px; height: 30px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--surface-2); color: var(--primary); border: 1px solid var(--line); }
-:root[data-theme="dark"] .item .tipo { color: var(--on-primary); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .item .tipo { color: var(--on-primary); } }
 .item .tipo svg { width: 16px; height: 16px; }
 .item .txt { flex: 1; min-width: 0; border: 0; background: none; text-align: left; padding: 0; }
 .item .txt b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -127,9 +116,9 @@ button { cursor: pointer; }
 .z6 .rot-mapa.pais div { opacity: .55; }
 .pino { background: none; border: 0; }
 .pino div { width: 22px; height: 22px; border-radius: 50%; background: var(--c); border: 2px solid #fff; display: grid; place-items: center; color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); translate: -50% -50%; }
-.pino.cidade div { width: 12px; height: 12px; }
+.pino.cidade div { width: 24px; height: 24px; background: #fff; border: 3px solid var(--c); font-size: 15px; line-height: 1; }
 .pino div svg { width: 12px; height: 12px; }
-.pino.cidade div svg { display: none; }
+.pino div.band { overflow: hidden; }
 .leaflet-tooltip.rot-lugar { background: var(--surface); color: var(--ink); border: 0; box-shadow: 0 1px 4px rgba(0,0,0,.25); font-size: 11px; padding: 2px 6px; }
 .leaflet-tooltip.rot-lugar::before { display: none; }
 .leaflet-control-attribution { font-size: 9px; background: color-mix(in srgb, var(--surface) 75%, transparent) !important; color: var(--muted); }
@@ -410,10 +399,10 @@ async function alternaRotulo(lugarId, rotuloId) {
 /* ================= Mapa ================= */
 let mapa, camadaPaises, camadaEstados, camadaPinos, camadaRotPaises, camadaRotEstados, fundo;
 function corToken(nome) { return getComputedStyle(document.documentElement).getPropertyValue(nome).trim(); }
-function escuro() { return getComputedStyle(document.documentElement).colorScheme === 'dark'; }
+function escuro() { return false; }
 // Mapa de fundo: OpenFreeMap (vetorial, sem chave), com todos os nomes trocados para português
 async function estiloEmPortugues() {
-  for (const nome of [escuro() ? 'dark' : 'positron', 'positron']) {
+  for (const nome of ['liberty', 'positron']) {
     try {
       const r = await fetch(`https://tiles.openfreemap.org/styles/${nome}`);
       if (!r.ok) continue;
@@ -455,30 +444,32 @@ function iniciaMapa() {
     if (z >= 4) { if (!mapa.hasLayer(camadaEstados)) camadaEstados.addTo(mapa); }
     else camadaEstados.remove();
   };
-  mapa.on('zoomend', ajustaZoom); ajustaZoom();
+  mapa.on('zoomend', () => { ajustaZoom(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); }); ajustaZoom();
 
   mapa.on('click', e => { if (S.modoMira) { saiMira(); novoLugarEm(e.latlng.lat, e.latlng.lng); } });
   mapa.on('contextmenu', e => novoLugarEm(e.latlng.lat, e.latlng.lng));
 }
 let paisesVis = new Set(), paisesQuero = new Set(), estadosVis = new Set(), estadosQuero = new Set();
 function estiloPais(f) {
-  const id = f.properties.id, v = paisesVis.has(id), q = !v && paisesQuero.has(id);
-  if (!v && !q) return { stroke: false, fill: false };
-  return { stroke: true, fill: true, color: v ? corToken('--visit') : corToken('--want'), weight: 1.2, opacity: 0.9,
-    fillColor: v ? corToken('--visit') : corToken('--want'), fillOpacity: v ? 0.16 : 0.14 };
+  const id = f.properties.id, v = paisesVis.has(id), q = !v && paisesQuero.has(id), z = mapa ? mapa.getZoom() : 3;
+  if ((!v && !q) || z >= 6) return { stroke: false, fill: false };
+  const cor = v ? corToken('--visit') : corToken('--want');
+  return { stroke: true, fill: true, color: cor, weight: 1.5, opacity: 0.9, fillColor: cor, fillOpacity: z >= 5 ? 0.12 : 0.22 };
 }
 function estiloEstado(f) {
-  const id = f.properties.id, v = estadosVis.has(id), q = !v && estadosQuero.has(id);
-  if (!v && !q) return { stroke: false, fill: false };
-  return { stroke: true, fill: true, color: v ? corToken('--visit') : corToken('--want'), weight: 0.8, opacity: 0.8,
-    fillColor: v ? corToken('--visit') : corToken('--want'), fillOpacity: v ? 0.34 : 0.22 };
+  const id = f.properties.id, v = estadosVis.has(id), q = !v && estadosQuero.has(id), z = mapa ? mapa.getZoom() : 3;
+  if ((!v && !q) || z >= 9) return { stroke: false, fill: false };
+  const cor = v ? corToken('--visit') : corToken('--want');
+  return { stroke: true, fill: z < 7, color: cor, weight: z >= 7 ? 2 : 1, opacity: 0.85, fillColor: cor, fillOpacity: z >= 6 ? 0.12 : 0.28 };
 }
 function desenhaPinos() {
   camadaPinos.clearLayers();
   for (const l of S.lugares) {
     if (!S.lr.has(l.id)) continue;
     const m = L.marker([l.lat, l.lon], {
-      icon: L.divIcon({ className: `pino ${l.tipo}`, html: `<div style="--c:${corDoLugar(l.id)}">${ICONES[l.tipo]}</div>`, iconSize: [0, 0] }),
+      icon: L.divIcon({ className: `pino ${l.tipo}`, html: l.tipo === 'cidade'
+        ? `<div class="band" style="--c:${corDoLugar(l.id)}">${bandeira(l.pais)}</div>`
+        : `<div style="--c:${corDoLugar(l.id)}">${ICONES[l.tipo]}</div>`, iconSize: [0, 0] }),
       title: l.nome,
     });
     m.on('click', () => abreLugar(l.id));
