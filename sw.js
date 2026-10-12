@@ -1,7 +1,7 @@
 // Por Onde Andei — service worker
 // Página e mapas: rede primeiro (pega atualização), cache se estiver offline.
 // Bibliotecas e fontes: cache primeiro. Mapa de fundo fica no cache normal do navegador.
-const VERSAO = 'poa-v16';
+const VERSAO = 'poa-v17';
 const BASE = ['./', './index.html', './manifest.json', './paises.json', './estados.json', './municipios-br.json', './aeroportos.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -25,7 +25,7 @@ self.addEventListener('fetch', e => {
   if (url.hostname.endsWith('supabase.co') || url.hostname.includes('nominatim')) return;
 
   const ehLib = url.hostname === 'cdn.jsdelivr.net' || url.hostname.includes('fonts.g');
-  if (url.hostname.includes('openfreemap') || url.hostname.includes('openstreetmap.org')) return;
+  if (url.hostname.includes('openfreemap') || url.hostname.includes('openstreetmap.org') || url.hostname.includes('wikimedia.org')) return;
   if (ehLib) {
     e.respondWith(
       caches.match(req).then(hit => hit || fetch(req).then(res => {

@@ -196,6 +196,12 @@ button { cursor: pointer; }
 .band-card { border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; padding: 10px 6px; display: grid; justify-items: center; gap: 4px; }
 .band-card span { font-size: 2.6rem; line-height: 1; }
 .band-card small { font-size: .78rem; text-align: center; }
+.band-card.estado img { width: 64px; height: 44px; object-fit: contain; }
+.abas-band { display: flex; gap: 6px; background: var(--surface-2); padding: 4px; border-radius: 10px; }
+.abas-band button { flex: 1; border: 0; background: none; padding: 8px; border-radius: 8px; font-weight: 600; color: var(--muted); }
+.abas-band button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.abas-band b { color: var(--visit); margin-left: 4px; }
+.grupo-band { display: flex; justify-content: space-between; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; margin-top: 4px; }
 .band-card.quero { opacity: .45; filter: grayscale(.8); }
 .selo { font-size: .72rem; font-weight: 700; color: #fff; background: var(--c); border-radius: 99px; padding: 3px 8px; white-space: nowrap; }
 .menu-link { display: block; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); color: var(--accent); font-weight: 700; text-decoration: none; }
@@ -1333,7 +1339,8 @@ function abreEstatisticas() {
   const contsVis = [...conts].filter(([, [v]]) => v).length;
   const munBR = new Set(visitados.filter(l => l.tipo === 'cidade' && l.ref_externa?.startsWith('ibge:')).map(l => l.ref_externa)).size;
   const ufsBR = [...estadosVis].filter(e => e.startsWith('BR-')).length;
-  const ext = k => visitados.reduce((m, l) => !m || k(l, m) ? l : m, null);
+  const cidadesVis = visitados.filter(l => l.tipo === 'cidade');
+  const ext = k => cidadesVis.reduce((m, l) => !m || k(l, m) ? l : m, null);
   const norte = ext((a, b) => a.lat > b.lat), sul = ext((a, b) => a.lat < b.lat), leste = ext((a, b) => a.lon > b.lon), oeste = ext((a, b) => a.lon < b.lon);
   const porTipo = {}; visitados.forEach(l => { const t = ehParque(l) ? 'parque' : l.tipo; porTipo[t] = (porTipo[t] || 0) + 1; });
   const NOMES_T = { cidade: 'Cidades', unesco: 'Patrimônios UNESCO', aeroporto: 'Aeroportos', porto: 'Portos', atracao: 'Atrações', parque: 'Parques nacionais', outro: 'Outros lugares' };
@@ -1353,25 +1360,65 @@ function abreEstatisticas() {
     <h4>O que você já marcou</h4>
     <div class="tabela">${Object.keys(NOMES_T).filter(t => porTipo[t]).map(t => `<span>${NOMES_T[t]}</span><b>${num(porTipo[t])}</b>`).join('')}
       ${porRot.map(([r, n]) => `<span><i class="bolinha" style="background:${esc(r.cor)}"></i>${esc(r.nome)}</span><b>${num(n)}</b>`).join('')}</div>
-    ${norte ? `<h4>Extremos</h4><div class="tabela">
+    ${norte ? `<h4>Cidades nos extremos</h4><div class="tabela">
       <span>Mais ao norte</span><b>${esc(norte.nome)}</b><span>Mais ao sul</span><b>${esc(sul.nome)}</b>
       <span>Mais a leste</span><b>${esc(leste.nome)}</b><span>Mais a oeste</span><b>${esc(oeste.nome)}</b></div>` : ''}
     <div class="acoes"><button class="btn" id="st-fechar">Fechar</button></div>`, (m, fechar) => { m.querySelector('#st-fechar').onclick = fechar; });
 }
 
 /* ================= Mapa de bandeiras ================= */
-function abreBandeiras() {
+// Estados: imagem oficial do Wikimedia Commons (tabela viagem_bandeiras, código ISO 3166-2 -> arquivo)
+const ISO_REGIAO = {"FR-RGUYANEFRAN":"FR-GUF","FR-RHAUTSDEFRA":"FR-HDF","FR-RGRANDEST":"FR-GES","ES-RCEUTA":"ES-CE","IT-RVALLEDAOST":"IT-23","IT-RPIEMONTE":"IT-21","IT-RLOMBARDIA":"IT-25","IT-RTRENTINOAL":"IT-32","IT-RLIGURIA":"IT-42","FR-RPROVENCEAL":"FR-PAC","FR-RAUVERGNERH":"FR-ARA","ES-RMELILLA":"ES-ML","IT-REMILIAROMA":"IT-45","IT-RMARCHE":"IT-57","IT-RVENETO":"IT-34","IT-RFRIULIVENE":"IT-36","FR-RNOUVELLEAQ":"FR-NAQ","ES-RFORALDENAV":"ES-NA","ES-RPAISVASCO":"ES-PV","ES-RARAGON":"ES-AR","FR-ROCCITANIE":"FR-OCC","ES-RCATALUNA":"ES-CT","FR-RBOURGOGNEF":"FR-BFC","ES-REXTREMADUR":"ES-EX","ES-RANDALUCIA":"ES-AN","ES-RGALICIA":"ES-GA","ES-RCASTILLAYL":"ES-CL","IT-RABRUZZO":"IT-65","IT-RMOLISE":"IT-67","IT-RAPULIA":"IT-75","IT-RBASILICATA":"IT-77","IT-RCALABRIA":"IT-78","IT-RCAMPANIA":"IT-72","IT-RLAZIO":"IT-62","IT-RTOSCANA":"IT-52","ES-RVALENCIANA":"ES-VC","ES-RMURCIA":"ES-MU","ES-RASTURIAS":"ES-AS","ES-RCANTABRIA":"ES-CB","FR-RPAYSDELALO":"FR-PDL","FR-RBRETAGNE":"FR-BRE","FR-RNORMANDIE":"FR-NOR","FR-RMARTINIQUE":"FR-MTQ","FR-RGUADELOUPE":"FR-GUA","FR-RREUNION":"FR-LRE","FR-RMAYOTTE":"FR-MAY","ES-RCANARYIS":"ES-CN","IT-RSICILY":"IT-82","ES-RISLASBALEA":"ES-PM","IT-RSARDEGNA":"IT-88","FR-RCORSE":"FR-COR","ES-RLARIOJA":"ES-LO","ES-RCASTILLALA":"ES-CM","IT-RUMBRIA":"IT-55","FR-RCENTREVALD":"FR-CVL","FR-RILEDEFRANC":"FR-IDF","ES-RMADRID":"ES-MD"};
+const isoEstado = id => ISO_REGIAO[id] || id;
+const urlBandeira = arq => `https://commons.wikimedia.org/wiki/Special:FilePath/${arq}?width=160`;
+async function abreBandeiras(abaInicial = 'paises') {
   calcula();
   const ord = ids => [...ids].sort((a, b) => nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
   const card = (id, quero) => `<button class="band-card${quero ? ' quero' : ''}" data-pais="${esc(id)}"><span>${bandeira(id)}</span><small>${esc(nomePais(id))}</small></button>`;
+  let arquivos = {};
+  const codigos = [...estadosVis, ...estadosQuero].map(isoEstado);
+  if (codigos.length) {
+    const { data } = await supa.from('viagem_bandeiras').select('codigo,arquivo').in('codigo', codigos);
+    (data || []).forEach(r => arquivos[r.codigo] = r.arquivo);
+  }
+  const cardEstado = (id, quero) => {
+    const arq = arquivos[isoEstado(id)], pais = S.estadoPorId.get(id)?.pais;
+    const img = arq ? `<img src="${urlBandeira(arq)}" alt="" loading="lazy" onerror="this.replaceWith(document.createTextNode('${bandeira(pais)}'))">` : `<span>${bandeira(pais)}</span>`;
+    return `<button class="band-card estado${quero ? ' quero' : ''}" data-estado="${esc(id)}">${img}<small>${esc(nomeEstado(id))}</small></button>`;
+  };
+  const porPais = ids => {
+    const g = new Map(); [...ids].forEach(id => { const p = S.estadoPorId.get(id)?.pais || '?'; if (!g.has(p)) g.set(p, []); g.get(p).push(id); });
+    return [...g].sort((a, b) => nomePais(a[0]).localeCompare(nomePais(b[0]), 'pt-BR'));
+  };
+  const htmlEstados = () => {
+    let h = '';
+    for (const [p, ids] of porPais(estadosVis)) {
+      const total = S.estados.filter(e => e.pais === p).length;
+      h += `<div class="grupo-band"><span>${bandeira(p)} ${esc(nomePais(p))}</span><span>${ids.length} de ${total}</span></div>`;
+      h += `<div class="bandeiras">${ids.sort((a, b) => nomeEstado(a).localeCompare(nomeEstado(b), 'pt-BR')).map(id => cardEstado(id)).join('')}</div>`;
+    }
+    if (estadosQuero.size) h += `<h4>Quero ir</h4><div class="bandeiras">${[...estadosQuero].map(id => cardEstado(id, true)).join('')}</div>`;
+    return h || '<p>Nenhum estado visitado ainda.</p>';
+  };
+  const htmlPaises = () => `<div class="bandeiras">${ord(paisesVis).map(id => card(id)).join('')}</div>
+    ${paisesQuero.size ? `<h4>Quero ir</h4><div class="bandeiras">${ord(paisesQuero).map(id => card(id, true)).join('')}</div>` : ''}`;
   abreModal(`
     <h3>Minhas bandeiras</h3>
-    <p>${paisesVis.size} ${paisesVis.size === 1 ? 'país visitado' : 'países visitados'}${paisesQuero.size ? ` · ${paisesQuero.size} na lista de desejos` : ''}</p>
-    <div class="bandeiras">${ord(paisesVis).map(id => card(id)).join('')}</div>
-    ${paisesQuero.size ? `<h4>Quero ir</h4><div class="bandeiras">${ord(paisesQuero).map(id => card(id, true)).join('')}</div>` : ''}
+    <div class="abas-band" role="tablist">
+      <button role="tab" data-aba-band="paises">Países <b>${paisesVis.size}</b></button>
+      <button role="tab" data-aba-band="estados">Estados <b>${estadosVis.size}</b></button>
+    </div>
+    <div id="band-corpo"></div>
     <div class="acoes"><button class="btn" id="bd-fechar">Fechar</button></div>`, (m, fechar) => {
+    const mostra = aba => {
+      m.querySelectorAll('[data-aba-band]').forEach(b => b.setAttribute('aria-selected', b.dataset.abaBand === aba));
+      m.querySelector('#band-corpo').innerHTML = aba === 'paises' ? htmlPaises() : htmlEstados();
+      m.querySelectorAll('[data-pais]').forEach(b => b.onclick = () => { fechar(); const p = S.paisPorId.get(b.dataset.pais); S.aba = 'paises'; atualizaTudo(); if (p) mapa.fitBounds([[p.maior[1], p.maior[0]], [p.maior[3], p.maior[2]]]); });
+      m.querySelectorAll('[data-estado]').forEach(b => b.onclick = () => { fechar(); const e = S.estadoPorId.get(b.dataset.estado); S.aba = 'estados'; atualizaTudo(); if (e) mapa.fitBounds([[e.bbox[1], e.bbox[0]], [e.bbox[3], e.bbox[2]]]); });
+    };
+    m.querySelectorAll('[data-aba-band]').forEach(b => b.onclick = () => mostra(b.dataset.abaBand));
     m.querySelector('#bd-fechar').onclick = fechar;
-    m.querySelectorAll('[data-pais]').forEach(b => b.onclick = () => { fechar(); const p = S.paisPorId.get(b.dataset.pais); S.aba = 'paises'; atualizaTudo(); if (p) mapa.fitBounds([[p.maior[1], p.maior[0]], [p.maior[3], p.maior[2]]]); });
+    mostra(abaInicial);
   });
 }
 
