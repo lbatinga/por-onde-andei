@@ -1,7 +1,7 @@
 // Por Onde Andei — service worker
 // Página e mapas: rede primeiro (pega atualização), cache se estiver offline.
 // Bibliotecas e fontes: cache primeiro. Mapa de fundo fica no cache normal do navegador.
-const VERSAO = 'poa-v10';
+const VERSAO = 'poa-v11';
 const BASE = ['./', './index.html', './manifest.json', './paises.json', './estados.json', './municipios-br.json', './aeroportos.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -130,7 +130,8 @@ button { cursor: pointer; }
 .z6 .rot-mapa.pais div { opacity: .55; }
 .pino { background: none; border: 0; }
 .pino div { width: 22px; height: 22px; border-radius: 50%; background: var(--c); border: 2px solid #fff; display: grid; place-items: center; color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); translate: -50% -50%; }
-.pino.base div { background: #fff; color: #6b7c7d; border: 2px solid #9aa9aa; width: 20px; height: 20px; box-shadow: none; opacity: .9; }
+.pino.base div { background: #fff; color: var(--cb); border: 2px solid var(--cb); width: 20px; height: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.25); opacity: .9; }
+.pino div.cat { border: 3px solid var(--c); width: 24px; height: 24px; }
 .pino.base div svg { width: 11px; height: 11px; }
 .item.base .txt b { font-weight: 500; }
 .ctl-local a { display: grid !important; place-items: center; color: #1a73e8 !important; }
@@ -418,11 +419,15 @@ async function alternaRotulo(lugarId, rotuloId) {
 }
 
 /* ================= Bases prontas: UNESCO e aeroportos ================= */
+// Cores da UNESCO como no Places Been: azul cultural, verde natural, metade/metade misto
+const CATEGORIAS = { cultural: { nome: 'Cultural', cor: '#2563eb' }, natural: { nome: 'Natural', cor: '#16a34a' }, misto: { nome: 'Misto', cor: '#0d9488' } };
+const catDe = ref => (S.baseUnesco || []).find(b => b.ref === ref)?.cat || 'cultural';
+const fundoCat = cat => cat === 'misto' ? 'linear-gradient(135deg,#2563eb 50%,#16a34a 50%)' : CATEGORIAS[cat].cor;
 // UNESCO: tabela viagem_unesco (Wikidata, nomes em português). Aeroportos: aeroportos.json (OurAirports, voos comerciais).
 let basePromessa = {};
 function carregaBase(tipo) {
-  if (tipo === 'unesco') return basePromessa.unesco ||= todos(() => supa.from('viagem_unesco').select('whs,nome,lat,lon,paises').order('whs'))
-    .then(rows => (S.baseUnesco = rows.map(r => ({ ref: 'unesco:' + r.whs, tipo: 'unesco', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.paises?.[0] || null, sub: (r.paises || []).map(nomePais).join(', ') }))))
+  if (tipo === 'unesco') return basePromessa.unesco ||= todos(() => supa.from('viagem_unesco').select('whs,nome,lat,lon,paises,categoria').order('whs'))
+    .then(rows => (S.baseUnesco = rows.map(r => ({ ref: 'unesco:' + r.whs, tipo: 'unesco', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.paises?.[0] || null, cat: r.categoria || 'cultural', sub: [CATEGORIAS[r.categoria || 'cultural'].nome, (r.paises || []).map(nomePais).join(', ')].filter(Boolean).join(' · ') }))))
     .catch(e => { basePromessa.unesco = null; throw e; });
   if (tipo === 'aeroporto') return basePromessa.aero ||= fetch('aeroportos.json').then(r => r.json())
     .then(rows => (S.baseAero = rows.map(([iata, nome, lat, lon, cc, cidade, grande]) => ({ ref: 'iata:' + iata, tipo: 'aeroporto', nome, lat, lon, pais: cc, iata, grande, sub: `${iata} · ${[cidade, nomePais(cc)].filter(Boolean).join(', ')}` }))))
@@ -433,7 +438,8 @@ const basePorAba = aba => aba === 'unesco' ? (S.baseUnesco || []) : aba === 'tra
 const lugarDaRef = ref => S.lugares.find(l => l.ref_externa === ref);
 function linhaBase(b) {
   const marcas = S.rotulos.map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="false" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-base="${esc(b.ref)}" data-r="${r.id}">${CHECK}</button>`).join('');
-  return `<div class="item base"><span class="tipo">${ICONES[b.tipo]}</span>
+  const estiloTipo = b.tipo === 'unesco' ? ` style="color:${CATEGORIAS[b.cat].cor};border-color:${CATEGORIAS[b.cat].cor}"` : '';
+  return `<div class="item base"><span class="tipo"${estiloTipo}>${ICONES[b.tipo]}</span>
     <button class="txt" data-abrir-base="${esc(b.ref)}"><b>${esc(b.nome)}</b><small>${esc(b.sub || '')}</small></button>
     <div class="marcas">${marcas}</div></div>`;
 }
@@ -462,14 +468,15 @@ function desenhaBase() {
   if (!camadaBase) return;
   camadaBase.clearLayers();
   const base = basePorAba(S.aba); if (!base.length) return;
-  const z = mapa.getZoom(); if (z < (S.aba === 'unesco' ? 4 : 5)) return;
+  const z = mapa.getZoom(); if (z < (S.aba === 'unesco' ? 3 : 5)) return;
   const bb = mapa.getBounds().pad(0.05); let n = 0;
   for (const b of base) {
     if (n > 400) break;
     if (!bb.contains([b.lat, b.lon]) || lugarDaRef(b.ref)) continue;
     if (S.aba === 'transporte' && z < 7 && !b.grande) continue;
     n++;
-    const m = L.marker([b.lat, b.lon], { icon: L.divIcon({ className: `pino base ${b.tipo}`, html: `<div>${ICONES[b.tipo]}</div>`, iconSize: [0, 0] }), title: b.nome });
+    const cor = b.tipo === 'unesco' ? CATEGORIAS[b.cat].cor : '#6b7c7d';
+    const m = L.marker([b.lat, b.lon], { icon: L.divIcon({ className: `pino base ${b.tipo}`, html: `<div style="--cb:${cor}">${ICONES[b.tipo]}</div>`, iconSize: [0, 0] }), title: b.nome });
     m.on('click', () => abreBase(b.ref));
     camadaBase.addLayer(m);
   }
@@ -582,7 +589,9 @@ function desenhaPinos() {
     const m = L.marker([l.lat, l.lon], {
       icon: L.divIcon({ className: `pino ${l.tipo}`, html: l.tipo === 'cidade'
         ? `<div class="band" style="--c:${corDoLugar(l.id)}">${bandeira(l.pais)}</div>`
-        : `<div style="--c:${corDoLugar(l.id)}">${ICONES[l.tipo]}</div>`, iconSize: [0, 0] }),
+        : l.tipo === 'unesco'
+          ? `<div class="cat" style="--c:${corDoLugar(l.id)};background:${fundoCat(catDe(l.ref_externa))}">${ICONES.unesco}</div>`
+          : `<div style="--c:${corDoLugar(l.id)}">${ICONES[l.tipo]}</div>`, iconSize: [0, 0] }),
       title: l.nome,
     });
     m.on('click', () => abreLugar(l.id));
@@ -628,8 +637,9 @@ function linhaLugar(l) {
   const m = rotulosDe(l.id);
   const local = [nomeEstado(l.estado), nomePais(l.pais)].filter(Boolean).join(', ');
   const marcas = S.rotulos.map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="${m.has(r.id)}" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-l="${l.id}" data-r="${r.id}">${CHECK}</button>`).join('');
-  return `<div class="item"><span class="tipo">${ICONES[l.tipo]}</span>
-    <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc(local || TIPOS[l.tipo].um)}</small></button>
+  const estiloTipo = l.tipo === 'unesco' ? ` style="color:#fff;border:0;background:${fundoCat(catDe(l.ref_externa))}"` : '';
+  return `<div class="item"><span class="tipo"${estiloTipo}>${ICONES[l.tipo]}</span>
+    <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : '', local || TIPOS[l.tipo].um].filter(Boolean).join(' · '))}</small></button>
     <div class="marcas">${marcas}</div></div>`;
 }
 // A lista mostra só o que está visível no mapa (como no Places Been)
@@ -1204,6 +1214,7 @@ async function entrar(user) {
   } catch (e) { $('#carregando').textContent = 'Erro ao carregar: ' + e.message; iniciado = false; return; }
   $('#carregando').hidden = true; $('#app').hidden = false;
   iniciaMapa(); atualizaTudo();
+  carregaBase('unesco').then(() => atualizaTudo()).catch(() => {});
   const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1));
 
   $('#contadores').addEventListener('click', e => { const b = e.target.closest('.contador'); if (!b) return; S.aba = b.dataset.aba; S.filtro = ''; $('#filtro').value = ''; atualizaTudo(); });
