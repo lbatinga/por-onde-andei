@@ -272,7 +272,7 @@ const TIPOS = {
   unesco:    { nome: 'Patrimônios da UNESCO', um: 'Patrimônio da UNESCO', curto: 'UNESCO' },
   aeroporto: { nome: 'Aeroportos', um: 'Aeroporto', curto: 'Aeroportos' },
   porto:     { nome: 'Portos', um: 'Porto', curto: 'Portos' },
-  atracao:   { nome: 'Atrações', um: 'Atração turística', curto: 'Atrações' },
+  atracao:   { nome: 'Atrações e parques', um: 'Atração turística', curto: 'Atrações' },
   outro:     { nome: 'Outros lugares', um: 'Outro lugar', curto: 'Outros' },
 };
 const ICONES = {
@@ -281,6 +281,7 @@ const ICONES = {
   aeroporto: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.5v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V8.5l-8 5v2l8-2.5V18l-2 1.5V21l3.5-1 3.5 1v-1.5L13 18v-5z"/></svg>',
   porto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><path d="M12 7v14M8 11h8M4 14a8 7 0 0 0 16 0"/></svg>',
   atracao: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>',
+  parque: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 6 10h3l-4 6h5v6h4v-6h5l-4-6h3z"/></svg>',
   outro: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>',
 };
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><path d="m5 12 5 5 9-10"/></svg>';
@@ -420,6 +421,10 @@ async function alternaRotulo(lugarId, rotuloId) {
 
 /* ================= Bases prontas: UNESCO e aeroportos ================= */
 // Cores da UNESCO como no Places Been: azul cultural, verde natural, metade/metade misto
+// Parques nacionais ficam no tipo "atracao" com referência parque:<id> (aba Atrações e parques)
+const ehParque = x => (x.ref_externa || x.ref || '').startsWith('parque:');
+const iconeDe = x => ehParque(x) ? ICONES.parque : ICONES[x.tipo];
+const corBase = b => b.tipo === 'unesco' ? CATEGORIAS[b.cat].cor : ehParque(b) ? '#16a34a' : b.tipo === 'atracao' ? '#ea580c' : '#6b7c7d';
 const CATEGORIAS = { cultural: { nome: 'Cultural', cor: '#2563eb' }, natural: { nome: 'Natural', cor: '#16a34a' }, misto: { nome: 'Misto', cor: '#0d9488' } };
 const catDe = ref => (S.baseUnesco || []).find(b => b.ref === ref)?.cat || 'cultural';
 const fundoCat = cat => cat === 'misto' ? 'linear-gradient(135deg,#2563eb 50%,#16a34a 50%)' : CATEGORIAS[cat].cor;
@@ -429,21 +434,25 @@ function carregaBase(tipo) {
   if (tipo === 'unesco') return basePromessa.unesco ||= todos(() => supa.from('viagem_unesco').select('whs,nome,lat,lon,paises,categoria').order('whs'))
     .then(rows => (S.baseUnesco = rows.map(r => ({ ref: 'unesco:' + r.whs, tipo: 'unesco', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.paises?.[0] || null, cat: r.categoria || 'cultural', sub: [CATEGORIAS[r.categoria || 'cultural'].nome, (r.paises || []).map(nomePais).join(', ')].filter(Boolean).join(' · ') }))))
     .catch(e => { basePromessa.unesco = null; throw e; });
+  if (tipo === 'atracao') return basePromessa.atr ||= todos(() => supa.from('viagem_atracoes').select('qid,tipo,nome,lat,lon,pais,relevancia').order('relevancia', { ascending: false }))
+    .then(rows => (S.baseAtr = rows.map(r => ({ ref: (r.tipo === 'parque' ? 'parque:' : 'wd:') + r.qid, tipo: 'atracao', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.pais, grande: r.relevancia >= 60 ? 1 : 0, rel: r.relevancia, sub: [r.tipo === 'parque' ? 'Parque nacional' : 'Atração', nomePais(r.pais)].filter(Boolean).join(' · ') }))))
+    .catch(e => { basePromessa.atr = null; throw e; });
   if (tipo === 'aeroporto') return basePromessa.aero ||= fetch('aeroportos.json').then(r => r.json())
     .then(rows => (S.baseAero = rows.map(([iata, nome, lat, lon, cc, cidade, grande]) => ({ ref: 'iata:' + iata, tipo: 'aeroporto', nome, lat, lon, pais: cc, iata, grande, sub: `${iata} · ${[cidade, nomePais(cc)].filter(Boolean).join(', ')}` }))))
     .catch(e => { basePromessa.aero = null; throw e; });
   return Promise.resolve([]);
 }
-const basePorAba = aba => aba === 'unesco' ? (S.baseUnesco || []) : aba === 'transporte' ? (S.baseAero || []) : [];
+const basePorAba = aba => aba === 'unesco' ? (S.baseUnesco || []) : aba === 'transporte' ? (S.baseAero || []) : aba === 'atracao' ? (S.baseAtr || []) : [];
 const lugarDaRef = ref => S.lugares.find(l => l.ref_externa === ref);
 function linhaBase(b) {
   const marcas = S.rotulos.map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="false" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-base="${esc(b.ref)}" data-r="${r.id}">${CHECK}</button>`).join('');
   const estiloTipo = b.tipo === 'unesco' ? ` style="color:${CATEGORIAS[b.cat].cor};border-color:${CATEGORIAS[b.cat].cor}"` : '';
-  return `<div class="item base"><span class="tipo"${estiloTipo}>${ICONES[b.tipo]}</span>
+  const estiloT = estiloTipo || (b.tipo === 'atracao' ? ` style="color:${corBase(b)};border-color:${corBase(b)}"` : '');
+  return `<div class="item base"><span class="tipo"${estiloT}>${iconeDe(b)}</span>
     <button class="txt" data-abrir-base="${esc(b.ref)}"><b>${esc(b.nome)}</b><small>${esc(b.sub || '')}</small></button>
     <div class="marcas">${marcas}</div></div>`;
 }
-const acharBase = ref => (ref.startsWith('unesco:') ? S.baseUnesco : S.baseAero)?.find(b => b.ref === ref);
+const acharBase = ref => (ref.startsWith('unesco:') ? S.baseUnesco : ref.startsWith('iata:') ? S.baseAero : S.baseAtr)?.find(b => b.ref === ref);
 // Marcar um item da base cria o lugar na hora, já com o rótulo
 async function marcaBase(ref, rotuloId) {
   const b = acharBase(ref); if (!b) return;
@@ -468,15 +477,15 @@ function desenhaBase() {
   if (!camadaBase) return;
   camadaBase.clearLayers();
   const base = basePorAba(S.aba); if (!base.length) return;
-  const z = mapa.getZoom(); if (z < (S.aba === 'unesco' ? 3 : 5)) return;
+  const z = mapa.getZoom(); if (z < (S.aba === 'unesco' ? 3 : S.aba === 'atracao' ? 4 : 5)) return;
   const bb = mapa.getBounds().pad(0.05); let n = 0;
   for (const b of base) {
     if (n > 400) break;
     if (!bb.contains([b.lat, b.lon]) || lugarDaRef(b.ref)) continue;
     if (S.aba === 'transporte' && z < 7 && !b.grande) continue;
+    if (S.aba === 'atracao' && ehParque(b) && z < 6) continue;
     n++;
-    const cor = b.tipo === 'unesco' ? CATEGORIAS[b.cat].cor : '#6b7c7d';
-    const m = L.marker([b.lat, b.lon], { icon: L.divIcon({ className: `pino base ${b.tipo}`, html: `<div style="--cb:${cor}">${ICONES[b.tipo]}</div>`, iconSize: [0, 0] }), title: b.nome });
+    const m = L.marker([b.lat, b.lon], { icon: L.divIcon({ className: `pino base ${b.tipo}`, html: `<div style="--cb:${corBase(b)}">${iconeDe(b)}</div>`, iconSize: [0, 0] }), title: b.nome });
     m.on('click', () => abreBase(b.ref));
     camadaBase.addLayer(m);
   }
@@ -604,7 +613,7 @@ function desenhaPinos() {
         ? `<div class="band" style="--c:${corDoLugar(l.id)}">${bandeira(l.pais)}</div>`
         : l.tipo === 'unesco'
           ? `<div class="cat" style="--c:${corDoLugar(l.id)};background:${fundoCat(catDe(l.ref_externa))}">${ICONES.unesco}</div>`
-          : `<div style="--c:${corDoLugar(l.id)}">${ICONES[l.tipo]}</div>`, iconSize: [0, 0] }),
+          : `<div style="--c:${corDoLugar(l.id)}">${iconeDe(l)}</div>`, iconSize: [0, 0] }),
       title: l.nome,
     });
     m.on('click', () => abreLugar(l.id));
@@ -639,7 +648,7 @@ function atualizaTudo() {
     ['cidade', c.cidade, 'Cidades'],
     ['unesco', c.unesco, 'UNESCO'],
     ['transporte', c.aeroporto + c.porto, 'Aerop. e portos'],
-    ['atracao', c.atracao, 'Atrações'],
+    ['atracao', c.atracao, 'Atrações e parques'],
     ['outro', c.outro, 'Outros'],
   ];
   $('#contadores').innerHTML = itens.map(([k, v, t]) =>
@@ -651,8 +660,8 @@ function linhaLugar(l) {
   const local = [nomeEstado(l.estado), nomePais(l.pais)].filter(Boolean).join(', ');
   const marcas = S.rotulos.map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="${m.has(r.id)}" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-l="${l.id}" data-r="${r.id}">${CHECK}</button>`).join('');
   const estiloTipo = l.tipo === 'unesco' ? ` style="color:#fff;border:0;background:${fundoCat(catDe(l.ref_externa))}"` : '';
-  return `<div class="item"><span class="tipo"${estiloTipo}>${ICONES[l.tipo]}</span>
-    <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : '', local || TIPOS[l.tipo].um].filter(Boolean).join(' · '))}</small></button>
+  return `<div class="item"><span class="tipo"${estiloTipo}>${iconeDe(l)}</span>
+    <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : ehParque(l) ? 'Parque nacional' : '', local || TIPOS[l.tipo].um].filter(Boolean).join(' · '))}</small></button>
     <div class="marcas">${marcas}</div></div>`;
 }
 // A lista mostra só o que está visível no mapa (como no Places Been)
@@ -711,19 +720,19 @@ function renderLista() {
     const todos = S.lugares.filter(l => tipos.includes(l.tipo) && (!f || norm(l.nome + ' ' + nomeEstado(l.estado) + ' ' + nomePais(l.pais)).includes(f)));
     const ls = todos.filter(visivel).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     html = avisoMapa(ls.length, todos.length) + ls.map(linhaLugar).join('');
+    if (!ls.length && todos.length) html += '<div class="vazio-lista" style="padding:14px 20px"><b>Nenhum marcado nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     // itens da base ainda não marcados, na parte do mapa que está na tela
     const base = basePorAba(aba);
     if (base.length) {
       const z = mapa ? mapa.getZoom() : 2;
-      const outros = base.filter(b => !lugarDaRef(b.ref) && visivel(b) && (!f || norm(b.nome + ' ' + b.sub).includes(f)) && (aba !== 'transporte' || b.grande || z >= 6 || f));
-      outros.sort((a, b) => (b.grande || 0) - (a.grande || 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
-      if (outros.length) html += `<div class="grupo"><span>${aba === 'unesco' ? 'Outros patrimônios nesta área' : 'Outros aeroportos nesta área'}</span><span>${outros.length}</span></div>`
+      const outros = base.filter(b => !lugarDaRef(b.ref) && visivel(b) && (!f || norm(b.nome + ' ' + b.sub).includes(f)) && (aba !== 'transporte' || b.grande || z >= 6 || f) && (aba !== 'atracao' || !ehParque(b) || z >= 5 || f));
+      outros.sort((a, b) => (b.rel || 0) - (a.rel || 0) || (b.grande || 0) - (a.grande || 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
+      if (outros.length) html += `<div class="grupo"><span>${aba === 'unesco' ? 'Outros patrimônios nesta área' : aba === 'atracao' ? 'Outras atrações e parques nesta área' : 'Outros aeroportos nesta área'}</span><span>${outros.length}</span></div>`
         + outros.slice(0, 150).map(linhaBase).join('')
         + (outros.length > 150 ? `<div class="vazio-lista">Mais ${outros.length - 150}. Aproxime o mapa ou filtre pelo nome.</div>` : '');
-    } else if (aba === 'unesco' || aba === 'transporte') {
-      carregaBase(aba === 'unesco' ? 'unesco' : 'aeroporto').then(() => { renderLista(); desenhaBase(); }).catch(() => {});
+    } else if (aba === 'unesco' || aba === 'transporte' || aba === 'atracao') {
+      carregaBase(aba === 'unesco' ? 'unesco' : aba === 'atracao' ? 'atracao' : 'aeroporto').then(() => { renderLista(); desenhaBase(); }).catch(() => {});
     }
-    if (!ls.length && todos.length) html += '<div class="vazio-lista"><b>Nenhum marcado nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     if (!html) html = f ? `<div class="vazio-lista"><b>Nada encontrado</b>Nenhum item com “${esc(S.filtro)}”.</div>`
       : `<div class="vazio-lista"><b>Nenhum item aqui ainda</b>Use a busca lá em cima, toque em “+ Lugar” ou segure o dedo no mapa para adicionar. Se tem dados do Places Been, use Menu › Importar.</div>`;
   }
