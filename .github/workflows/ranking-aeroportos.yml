@@ -17,10 +17,10 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: pip install requests beautifulsoup4
-      - run: python scripts/ranking_aeroportos.py
+      - run: python scripts/ranking_aeroportos.py > scripts/ranking-log.txt 2>&1 || (cat scripts/ranking-log.txt; echo FALHOU >> scripts/ranking-log.txt)
       - name: Salva se mudou
         run: |
           git config user.name "Claude"
           git config user.email "noreply@anthropic.com"
-          git add ranking-aeroportos.json
+          git add ranking-aeroportos.json scripts/ranking-log.txt
           git diff --cached --quiet || (git commit -m "Atualiza ranking de aeroportos (ANAC e ACI)" && git push)
