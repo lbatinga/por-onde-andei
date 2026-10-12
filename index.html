@@ -117,6 +117,8 @@ body.publico #btn-menu { display: grid; }
 .cab-rotulos { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 12px; justify-content: flex-start; min-width: 0; font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--surface-2); }
 .cab-rotulos span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .cab-rotulos { gap: 4px 6px !important; }
+.cab-rotulos .leg { gap: 4px; padding: 2px 6px 2px 0; }
+.cab-rotulos .leg svg { width: 14px; height: 14px; flex: none; }
 .cab-rotulos i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--c); flex: none; }
 .lista { overflow-y: auto; flex: 1; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
@@ -1151,7 +1153,7 @@ function linhaLugar(l) {
     : S.rotulos.filter(r => rotuloServe(r, l.tipo) || m.has(r.id)).map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="${m.has(r.id)}" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-l="${l.id}" data-r="${r.id}">${CHECK}</button>`).join('');
   const estiloTipo = l.tipo === 'unesco' ? ` style="color:#fff;border:0;background:${fundoCat(catDe(l.ref_externa))}"` : '';
   return `<div class="item"><span class="tipo"${estiloTipo}${attrPorte(l)}>${iconeDe(l)}</span>
-    <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : ehParque(l) ? 'Parque nacional' : '', local || TIPOS[l.tipo].um, visitasDe(l.id)[0] ? fmtVisita(visitasDe(l.id)[0]) : ''].filter(Boolean).join(' · '))}</small></button>
+    <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : ehParque(l) ? 'Parque nacional' : '', local || TIPOS[l.tipo].um].filter(Boolean).join(' · '))}</small></button>
     <div class="marcas">${marcas}</div></div>`;
 }
 // A lista mostra só o que está visível no mapa (como no Places Been)
@@ -1163,11 +1165,13 @@ function noMapa() {
 function avisoMapa(n, total) {
   return n < total ? `<div class="no-mapa">Mostrando ${n} de ${total} · só o que aparece no mapa <button data-ver-todos>Ver todos</button></div>` : '';
 }
+// colunas do resumo de países/estados (mesma ordem da legenda)
+const COLS_RESUMO = [['cidade', 'Cidades'], ['unesco', 'UNESCO'], ['aeroporto', 'Aeroportos'], ['porto', 'Portos'], ['atracao', 'Atrações e parques'], ['museu', 'Museus']];
 function renderLista() {
   const f = norm(S.filtro), aba = S.aba, visivel = noMapa();
-  $('#cab-rotulos').hidden = aba === 'paises' || aba === 'estados';
+  $('#cab-rotulos').hidden = false;
   if (S.filtroRot && !S.rotulos.some(r => r.id === S.filtroRot)) S.filtroRot = null;
-  $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? '' : rotulosDaAba(aba).map(r => `<button class="filtro-rot" data-filtro-rot="${r.id}" aria-pressed="${S.filtroRot === r.id}" title="Mostrar só ${esc(r.nome)}"><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</button>`).join('')
+  $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? COLS_RESUMO.map(([t, nome]) => `<span class="leg">${ICONES[t]}${nome}</span>`).join('') : rotulosDaAba(aba).map(r => `<button class="filtro-rot" data-filtro-rot="${r.id}" aria-pressed="${S.filtroRot === r.id}" title="Mostrar só ${esc(r.nome)}"><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</button>`).join('')
     + (S.filtroRot ? '<button class="filtro-limpa" data-filtro-rot="">Mostrar todos</button>' : '');
   const titulos = { paises: 'Países', estados: 'Estados e províncias', transporte: 'Aeroportos e portos' };
   $('#painel-titulo').textContent = titulos[aba] || TIPOS[aba].nome;
@@ -1184,8 +1188,7 @@ function renderLista() {
     const UM = { cidade: 'cidade', unesco: 'UNESCO', aeroporto: 'aeroporto', porto: 'porto', atracao: 'atração', museu: 'museu', outro: 'outro lugar' };
     const VARIOS = { cidade: 'cidades', unesco: 'UNESCO', aeroporto: 'aeroportos', porto: 'portos', atracao: 'atrações', museu: 'museus', outro: 'outros lugares' };
     // sempre as mesmas colunas, na mesma ordem; zero fica apagado
-    const COLS = [['cidade', 'Cidades'], ['unesco', 'UNESCO'], ['aeroporto', 'Aeroportos'], ['porto', 'Portos'], ['atracao', 'Atrações e parques']];
-    const resumoHtml = k => `<span class="conts">${COLS.map(([t, nome]) => { const n = det.get(k)?.[t] || 0; return `<span class="${n ? '' : 'zero'}" title="${nome}">${ICONES[t]}${n}</span>`; }).join('')}</span>`;
+    const resumoHtml = k => `<span class="conts">${COLS_RESUMO.map(([t, nome]) => { const n = det.get(k)?.[t] || 0; return `<span class="${n ? '' : 'zero'}" title="${nome}">${ICONES[t]}${n}</span>`; }).join('')}</span>`;
     const resumo = k => Object.keys(TIPOS).filter(t => det.get(k)?.[t]).map(t => `${det.get(k)[t]} ${det.get(k)[t] === 1 ? UM[t] : VARIOS[t]}`).join(' · ');
     if (aba === 'paises') {
       const porCont = new Map();
