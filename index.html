@@ -533,13 +533,21 @@ function linhaLugar(l) {
 }
 function renderLista() {
   const f = norm(S.filtro), aba = S.aba;
-  $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? '<span style="width:auto">Lugares</span>' : S.rotulos.map(r => `<span><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</span>`).join('');
+  $('#cab-rotulos').hidden = aba === 'paises' || aba === 'estados';
+  $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? '' : S.rotulos.map(r => `<span><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</span>`).join('');
   const titulos = { paises: 'Países', estados: 'Estados e províncias', transporte: 'Aeroportos e portos' };
   $('#painel-titulo').textContent = titulos[aba] || TIPOS[aba].nome;
   let html = '';
   if (aba === 'paises' || aba === 'estados') {
-    const vis = idsVisita(), cont = new Map();
-    for (const l of S.lugares) { const k = aba === 'paises' ? l.pais : l.estado; if (k && visitado(l.id, vis)) cont.set(k, (cont.get(k) || 0) + 1); }
+    const vis = idsVisita(), cont = new Map(), det = new Map();
+    for (const l of S.lugares) {
+      const k = aba === 'paises' ? l.pais : l.estado; if (!k || !visitado(l.id, vis)) continue;
+      cont.set(k, (cont.get(k) || 0) + 1);
+      if (!det.has(k)) det.set(k, {}); const d = det.get(k); d[l.tipo] = (d[l.tipo] || 0) + 1;
+    }
+    const UM = { cidade: 'cidade', unesco: 'UNESCO', aeroporto: 'aeroporto', porto: 'porto', atracao: 'atração', outro: 'outro lugar' };
+    const VARIOS = { cidade: 'cidades', unesco: 'UNESCO', aeroporto: 'aeroportos', porto: 'portos', atracao: 'atrações', outro: 'outros lugares' };
+    const resumo = k => Object.keys(TIPOS).filter(t => det.get(k)?.[t]).map(t => `${det.get(k)[t]} ${det.get(k)[t] === 1 ? UM[t] : VARIOS[t]}`).join(' · ');
     if (aba === 'paises') {
       const porCont = new Map();
       for (const id of cont.keys()) { const p = S.paisPorId.get(id); const ct = CONTINENTES[p?.continente] || 'Outros'; if (!porCont.has(ct)) porCont.set(ct, []); porCont.get(ct).push(id); }
@@ -548,7 +556,7 @@ function renderLista() {
         const linhas = ids.filter(id => norm(nomePais(id)).includes(f)).sort((a, b) => nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
         if (!linhas.length) continue;
         html += `<div class="grupo"><span>${esc(ct)}</span><span>${ids.length} de ${totais.get(ct)}</span></div>`;
-        html += linhas.map(id => `<div class="item"><span class="bandeira">${bandeira(id)}</span><button class="txt" data-zoom-pais="${esc(id)}"><b>${esc(nomePais(id))}</b><small>${cont.get(id)} ${cont.get(id) === 1 ? 'lugar' : 'lugares'}</small></button></div>`).join('');
+        html += linhas.map(id => `<div class="item"><span class="bandeira">${bandeira(id)}</span><button class="txt" data-zoom-pais="${esc(id)}"><b>${esc(nomePais(id))}</b><small>${esc(resumo(id))}</small></button></div>`).join('');
       }
     } else {
       const ids = [...cont.keys()].filter(id => norm(nomeEstado(id)).includes(f))
@@ -557,7 +565,7 @@ function renderLista() {
       for (const id of ids) {
         const p = S.estadoPorId.get(id)?.pais;
         if (p !== ult) { const n = ids.filter(x => S.estadoPorId.get(x)?.pais === p).length; html += `<div class="grupo"><span>${bandeira(p)} ${esc(nomePais(p))}</span><span>${n} de ${S.estados.filter(e => e.pais === p).length}</span></div>`; ult = p; }
-        html += `<div class="item"><span class="tipo">${ICONES.outro}</span><button class="txt" data-zoom-estado="${esc(id)}"><b>${esc(nomeEstado(id))}</b><small>${cont.get(id)} ${cont.get(id) === 1 ? 'lugar' : 'lugares'}</small></button></div>`;
+        html += `<div class="item"><span class="tipo">${ICONES.outro}</span><button class="txt" data-zoom-estado="${esc(id)}"><b>${esc(nomeEstado(id))}</b><small>${esc(resumo(id))}</small></button></div>`;
       }
     }
     if (!html) html = `<div class="vazio-lista"><b>Nenhum ${aba === 'paises' ? 'país' : 'estado'} ainda</b>Marque lugares como “${esc(S.rotulos.find(r => r.conta_como_visita)?.nome || 'Estive')}” e eles aparecem aqui.</div>`;
