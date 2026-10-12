@@ -2119,6 +2119,7 @@ function abreEstatisticas() {
     ${Object.entries(REGIOES_BR).map(([r, ufs]) => barra(r, ufs.filter(u => ufsBR.has(u)).length, ufs.length)).join('')}
     <h5>Municípios por estado</h5><div id="st-mun-uf"><p class="meta">Carregando…</p></div>
     <h5>Patrimônios da UNESCO no Brasil</h5><div id="st-unesco"><p class="meta">Carregando…</p></div>
+    <h4>Aeroportos</h4><div id="st-aero"><p class="meta">Carregando…</p></div>
     ${anos.length ? `<h4>Por ano</h4><p class="meta">Lugares visitados pela primeira vez em cada ano${semData ? ` (${semData} ainda sem data ficam de fora)` : ''}.</p>
       <div class="anos">${anos.map(([a, n]) => `<div class="ano"><span>${a}</span><div class="ano-barra"><div style="width:${Math.round(100 * n / maxAno)}%"></div></div><b>${n}</b></div>`).join('')}</div>
       <div class="tabela">${melhor ? `<span>Melhor ano</span><b>${melhor[0]} · ${num(melhor[1])} ${melhor[1] === 1 ? 'lugar' : 'lugares'}</b>` : ''}
@@ -2151,6 +2152,17 @@ function abreEstatisticas() {
       const linhas = [...visUF].map(([uf, n]) => [uf, n, totUF.get(uf)]).sort((a, b) => b[1] / b[2] - a[1] / a[2] || b[1] - a[1]);
       box.innerHTML = linhas.length ? linhas.map(([uf, n, t]) => barra(`${nomeEstado('BR-' + uf) || uf} · ${pct(n, t)}`, n, t)).join('') : '<p class="meta">Nenhum município ainda.</p>';
     }).catch(() => { const box = m.querySelector('#st-mun-uf'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar a lista do IBGE.</p>'; });
+    // ranking dos seus aeroportos: Brasil (ANAC) e mundo (top 50 do ACI)
+    fetch('ranking-aeroportos.json').then(r => r.json()).then(rk => {
+      const box = m.querySelector('#st-aero'); if (!box) return;
+      const posBR = new Map(rk.brasil.lista.map(x => [x.iata, x.pos])), posMundo = new Map(rk.mundo.lista.map(x => [x.iata, x.pos]));
+      const meus = S.lugares.filter(l => l.tipo === 'aeroporto' && l.ref_externa?.startsWith('iata:') && (visitado(l.id, vis) || soLugar(l.id, so)))
+        .map(l => ({ l, iata: l.ref_externa.slice(5) })).map(x => ({ ...x, br: posBR.get(x.iata), mundo: posMundo.get(x.iata) }))
+        .sort((a, b) => (a.mundo || 999) - (b.mundo || 999) || (a.br || 999) - (b.br || 999) || a.l.nome.localeCompare(b.l.nome, 'pt-BR'));
+      if (!meus.length) { box.innerHTML = '<p class="meta">Nenhum aeroporto marcado ainda.</p>'; return; }
+      box.innerHTML = `<div class="tabela">${meus.map(x => `<span>${esc(x.l.nome)}</span><b>${[x.mundo ? `${x.mundo}º mundo` : '', x.br ? `${x.br}º Brasil` : ''].filter(Boolean).join(' · ') || 'fora do top 50'}</b>`).join('')}</div>
+        <p class="meta">Mundo: top 50 do ACI ${rk.mundo.ano}. Brasil: ANAC ${rk.brasil.ano}.</p>`;
+    }).catch(() => { const box = m.querySelector('#st-aero'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar o ranking.</p>'; });
     carregaBase('unesco').then(base => {
       const box = m.querySelector('#st-unesco'); if (!box) return;
       const br = base.filter(b => (b.paises || [b.pais]).includes('BR'));
