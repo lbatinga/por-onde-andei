@@ -103,6 +103,7 @@ button { cursor: pointer; }
 .marca svg { width: 16px; height: 16px; color: #fff; opacity: 0; }
 .marca[aria-pressed="true"] { background: var(--c); }
 .marca[aria-pressed="true"] svg { opacity: 1; }
+.add-pais { display: block; width: calc(100% - 24px); margin: 10px 12px 14px; padding: 10px; border: 1px dashed var(--line); border-radius: var(--r); background: none; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
 .vazio-lista { padding: 28px 20px; color: var(--muted); text-align: center; }
 .vazio-lista b { display: block; color: var(--ink); font: 700 1.05rem var(--f-display); margin-bottom: 4px; }
 .no-mapa { padding: 8px 12px; font-size: .82rem; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; justify-content: space-between; }
@@ -423,8 +424,10 @@ const TIPOS = {
   porto:     { nome: 'Portos', um: 'Porto', curto: 'Portos' },
   atracao:   { nome: 'Atrações e parques', um: 'Atração turística', curto: 'Atrações' },
   outro:     { nome: 'Outros lugares', um: 'Outro lugar', curto: 'Outros' },
+  pais:      { nome: 'Países', um: 'País inteiro', curto: 'Países' },
 };
 const ICONES = {
+  pais: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>',
   cidade: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l5-3v16M10 21V10h9v11M13 13h3M13 17h3"/></svg>',
   unesco: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-5 9 5M5 9v9M9.5 9v9M14.5 9v9M19 9v9M3 21h18"/></svg>',
   aeroporto: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.5v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V8.5l-8 5v2l8-2.5V18l-2 1.5V21l3.5-1 3.5 1v-1.5L13 18v-5z"/></svg>',
@@ -742,7 +745,7 @@ function escolhePais(l, paises) {
 }
 async function marcaCidadeDe(lugarId) {
   const l = S.lugares.find(x => x.id === lugarId);
-  if (!l || l.tipo === 'cidade' || S.publico || !navigator.onLine) return;
+  if (!l || l.tipo === 'cidade' || l.tipo === 'pais' || S.publico || !navigator.onLine) return;
   if (!visitado(l.id)) return;
   const rot = rotuloVisitaPadrao(); if (!rot) return;
   try {
@@ -987,7 +990,7 @@ function estiloEstado(f) {
   return { stroke: true, fill: z < 7, color: cor, weight: z >= 7 ? 2 : 1, opacity: 0.85, fillColor: cor, fillOpacity: z >= 6 ? 0.12 : 0.28 };
 }
 // Cada aba mostra só os pinos do seu tipo; Países e Estados mostram só a pintura
-const tiposDaAba = aba => ({ cidade: ['cidade'], unesco: ['unesco'], transporte: ['aeroporto', 'porto'], atracao: ['atracao'], outro: ['outro'], paises: [], estados: [] })[aba] || Object.keys(TIPOS);
+const tiposDaAba = aba => ({ cidade: ['cidade'], unesco: ['unesco'], transporte: ['aeroporto', 'porto'], atracao: ['atracao'], outro: ['outro'], paises: [], estados: [] })[aba] || Object.keys(TIPOS).filter(t => t !== 'pais');
 const abaDeRegiao = () => S.aba === 'paises' || S.aba === 'estados';
 function desenhaPinos() {
   camadaPinos.clearLayers();
@@ -1013,7 +1016,7 @@ function desenhaPinos() {
 function calcula() {
   const vis = idsVisita(), so = idsSoLugar();
   paisesVis = new Set(); paisesQuero = new Set(); estadosVis = new Set(); estadosQuero = new Set();
-  const cont = { cidade: 0, unesco: 0, aeroporto: 0, porto: 0, atracao: 0, outro: 0 };
+  const cont = { cidade: 0, unesco: 0, aeroporto: 0, porto: 0, atracao: 0, outro: 0, pais: 0 };
   for (const l of S.lugares) {
     if (!S.lr.has(l.id)) continue;
     if (visitado(l.id, vis)) {
@@ -1110,6 +1113,20 @@ function renderLista() {
         html += `<div class="item"><span class="tipo">${ICONES.outro}</span><button class="txt" data-zoom-estado="${esc(id)}"><b>${esc(nomeEstado(id))}</b>${resumoHtml(id)}</button></div>`;
       }
     }
+    if (aba === 'paises') {
+      // países que você quer conhecer (por um lugar "Quero ir" ou pelo país inteiro)
+      const quero = [...paisesQuero].filter(id => !paisesVis.has(id) && norm(nomePais(id)).includes(f)).sort((a, b) => nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
+      if (quero.length) {
+        html += `<div class="grupo"><span>Quero ir</span><span>${quero.length}</span></div>`;
+        html += quero.map(id => {
+          const lp = S.lugares.find(l => l.ref_externa === 'pais:' + id), m = lp ? rotulosDe(lp.id) : null;
+          const marcas = lp ? `<div class="marcas">${rotulosPara('pais').map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="${m.has(r.id)}" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-l="${lp.id}" data-r="${r.id}">${CHECK}</button>`).join('')}</div>` : '';
+          const n = S.lugares.filter(l => l.pais === id && l.tipo !== 'pais' && S.lr.has(l.id)).length;
+          return `<div class="item"><span class="bandeira">${bandeira(id)}</span><button class="txt" ${lp ? `data-abrir="${lp.id}"` : `data-zoom-pais="${esc(id)}"`}><b>${esc(nomePais(id))}</b><small>${lp ? 'País inteiro' : ''}${lp && n ? ' · ' : ''}${n ? `${n} ${n === 1 ? 'lugar' : 'lugares'} na lista` : ''}</small></button>${marcas}</div>`;
+        }).join('');
+      }
+      html += `<button class="add-pais" data-add-pais="1">+ Adicionar país que quero conhecer</button>`;
+    }
     if (html) html = avisoMapa(cont.size, totalK.size) + html;
     else if (totalK.size) html = avisoMapa(0, totalK.size) + '<div class="vazio-lista"><b>Nenhum marcado nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     if (!html) html = `<div class="vazio-lista"><b>Nenhum ${aba === 'paises' ? 'país' : 'estado'} ainda</b>Marque lugares como “${esc(S.rotulos.find(r => r.conta_como_visita)?.nome || 'Estive')}” e eles aparecem aqui.</div>`;
@@ -1202,7 +1219,7 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
     </div>
     ${l.id && !S.publico ? '<div class="campo"><span class="rotulo-campo">Fotos</span><div class="fotos" id="f-fotos"></div></div>' : ''}
     <div class="campo"><label for="f-notas">Notas</label><textarea id="f-notas" placeholder="Quando foi, com quem, o que achou…">${esc(l.notas || '')}</textarea></div>
-    <div class="meta">${esc([nomeEstado(loc.estado), nomePais(loc.pais)].filter(Boolean).join(', ') || 'Fora de qualquer país')} · ${l.lat.toFixed(4)}, ${l.lon.toFixed(4)}</div>
+    <div class="meta">${esc([l.tipo === 'pais' ? null : nomeEstado(loc.estado), nomePais(loc.pais)].filter(Boolean).join(', ') || 'Fora de qualquer país')} · ${l.lat.toFixed(4)}, ${l.lon.toFixed(4)}</div>
     <div class="acoes">
       ${aoExcluir ? '<button class="btn perigo" id="f-excluir" type="button">Excluir</button>' : ''}
       <button class="btn" id="f-cancelar" type="button">Cancelar</button>
@@ -1285,7 +1302,7 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
       }
       // data digitada mas sem tocar em Adicionar: entra também
       if (campoData.value.trim()) m.querySelector('#f-add-vis').click();
-      const idSalvo = await aoSalvar({ nome, tipo: campoTipo.value, notas: m.querySelector('#f-notas').value.trim() || null, pais: loc.pais, estado: loc.estado, ref_externa: conf.ref ?? null }, sel);
+      const idSalvo = await aoSalvar({ nome, tipo: campoTipo.value, notas: m.querySelector('#f-notas').value.trim() || null, pais: loc.pais, estado: campoTipo.value === 'pais' ? null : loc.estado, ref_externa: campoTipo.value === 'pais' && loc.pais ? 'pais:' + loc.pais : (conf.ref ?? null) }, sel);
       if (!idSalvo) { ev.target.disabled = false; return; }
       try { await gravaVisitas(idSalvo); } catch (e) { toast('Lugar salvo, mas as datas falharam: ' + e.message, 4000); }
       atualizaTudo(); fechar();
@@ -1303,7 +1320,7 @@ async function salvaRotulosDoLugar(id, sel) {
   if (por.length) setTimeout(() => marcaCidadeDe(id), 300);
 }
 function novoLugar(dados, sugestoes) {
-  const padrao = S.rotulos.find(r => r.conta_como_visita);
+  const padrao = (dados.rotuloInicial && S.rotulos.find(r => r.id === dados.rotuloInicial)) || S.rotulos.find(r => r.conta_como_visita);
   formLugar({
     titulo: 'Novo lugar', l: dados, rotSel: new Set(padrao ? [padrao.id] : []), sugestoes,
     aoSalvar: async (v, sel) => {
@@ -1397,12 +1414,28 @@ function tipoDoResultado(r) {
   if (['tourism', 'historic', 'leisure', 'natural', 'amenity', 'building', 'man_made'].includes(c)) return 'atracao';
   return 'outro';
 }
+function buscaPaises(q, qtd = 3) {
+  const n = norm(q); if (n.length < 2) return [];
+  const comeca = [], contem = [];
+  for (const p of S.paises) { const k = norm(p.nome || ''); if (k.startsWith(n)) comeca.push(p); else if (k.includes(n)) contem.push(p); }
+  return [...comeca, ...contem].slice(0, qtd);
+}
+const linhasPaises = q => { const ps = buscaPaises(q); return ps.length ? `<div class="grupo-busca">Países</div>${ps.map(p => { const ja = S.lugares.find(l => l.ref_externa === 'pais:' + p.id); return `<button data-pais-busca="${esc(p.id)}"><b>${bandeira(p.id)} ${esc(p.nome)}</b><small>País inteiro, sem escolher cidade${ja ? ' · já está na sua lista' : ''}</small></button>`; }).join('')}` : ''; };
+function abrePaisInteiro(id) {
+  $('#resultados').hidden = true; $('#busca').value = '';
+  const p = S.paisPorId.get(id); if (!p) return;
+  mapa.fitBounds([[p.maior[1], p.maior[0]], [p.maior[3], p.maior[2]]]);
+  const ja = S.lugares.find(l => l.ref_externa === 'pais:' + id); if (ja) return abreLugar(ja.id);
+  const quero = S.rotulos.find(r => norm(r.nome) === 'quero ir') || S.rotulos.find(r => !r.conta_como_visita);
+  novoLugar({ lat: (p.maior[1] + p.maior[3]) / 2, lon: (p.maior[0] + p.maior[2]) / 2, tipo: 'pais', nome: p.nome, pais: id, ref_externa: 'pais:' + id, rotuloInicial: paisesVis.has(id) ? null : quero?.id });
+}
 function linhaMunicipio(m) {
   const ja = cidadeJaCadastrada(m);
   return `<button data-mun="${m.cod}"><b>${esc(m.nome)}</b><small>Município · ${esc(nomeEstado('BR-' + m.uf) || m.uf)}${ja ? ' · já está na sua lista' : ''}</small></button>`;
 }
 function ligaResultados(box, mundo) {
   box.querySelectorAll('[data-mun]').forEach(b => b.onclick = () => abreMunicipio(S.munPorCod.get(b.dataset.mun)));
+  box.querySelectorAll('[data-pais-busca]').forEach(b => b.onclick = () => abrePaisInteiro(b.dataset.paisBusca));
   const bm = box.querySelector('[data-mundo]'); if (bm) bm.onclick = () => buscar($('#busca').value.trim());
   box.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
     const x = mundo[+b.dataset.i]; box.hidden = true; $('#busca').value = '';
@@ -1422,7 +1455,7 @@ function sugereEnquantoDigita(q) {
     try { await carregaMunicipios(); } catch {}
     const ms = buscaMunicipios(q);
     box.hidden = false;
-    box.innerHTML = (ms.length ? `<div class="grupo-busca">Municípios do Brasil</div>${ms.map(linhaMunicipio).join('')}` : '')
+    box.innerHTML = linhasPaises(q) + (ms.length ? `<div class="grupo-busca">Municípios do Brasil</div>${ms.map(linhaMunicipio).join('')}` : '')
       + `<button data-mundo="1" class="mundo"><b>Buscar “${esc(q.trim())}” no mundo</b><small>Cidades de fora, aeroportos, portos, atrações</small></button>`;
     ligaResultados(box, []);
   }, 120);
@@ -1434,7 +1467,7 @@ async function buscar(q) {
   const box = $('#resultados'); const seq = ++buscaSeq;
   try { await carregaMunicipios(); } catch {}
   const ms = buscaMunicipios(q, 4);
-  const topo = ms.length ? `<div class="grupo-busca">Municípios do Brasil</div>${ms.map(linhaMunicipio).join('')}` : '';
+  const topo = linhasPaises(q) + (ms.length ? `<div class="grupo-busca">Municípios do Brasil</div>${ms.map(linhaMunicipio).join('')}` : '');
   box.hidden = false; box.innerHTML = topo + '<div class="vazio">Buscando no mundo…</div>';
   try {
     const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&limit=12&addressdetails=1&accept-language=pt-BR`).then(r => r.json());
@@ -2482,6 +2515,7 @@ function montaApp() {
     if (mk) { if (S.publico) return; return mk.dataset.base ? marcaBase(mk.dataset.base, mk.dataset.r) : alternaRotulo(mk.dataset.l, mk.dataset.r); }
     const abb = e.target.closest('[data-abrir-base]'); if (abb) return abreBase(abb.dataset.abrirBase);
     const ab = e.target.closest('[data-abrir]'); if (ab) return abreLugar(ab.dataset.abrir);
+    if (e.target.closest('[data-add-pais]')) { const b = $('#busca'); b.focus(); b.placeholder = 'Digite o nome do país…'; return; }
     const zp = e.target.closest('[data-zoom-pais]'); if (zp) { const p = S.paisPorId.get(zp.dataset.zoomPais); if (p) mapa.fitBounds([[p.maior[1], p.maior[0]], [p.maior[3], p.maior[2]]]); return; }
     const ze = e.target.closest('[data-zoom-estado]'); if (ze) { const p = S.estadoPorId.get(ze.dataset.zoomEstado); if (p) mapa.fitBounds([[p.bbox[1], p.bbox[0]], [p.bbox[3], p.bbox[2]]]); }
   });
