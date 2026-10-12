@@ -2158,8 +2158,8 @@ function abreBackup() {
     <div class="acoes"><button class="btn" id="bk-fechar">Fechar</button></div>`, (m, fechar) => {
     m.querySelector('#bk-fechar').onclick = fechar;
     m.querySelector('#bk-json').onclick = () => {
-      const dados = { app: 'Por Onde Andei', versao: 1, gerado_em: new Date().toISOString(), rotulos: S.rotulos, lugares: S.lugares,
-        marcas: [...S.lr].flatMap(([l, mm]) => [...mm.keys()].map(r => ({ lugar_id: l, rotulo_id: r }))), visitas: S.visitas || [] };
+      const dados = { app: 'Por Onde Andei', versao: 2, gerado_em: new Date().toISOString(), rotulos: S.rotulos, lugares: S.lugares,
+        marcas: [...S.lr].flatMap(([l, mm]) => [...mm.keys()].map(r => ({ lugar_id: l, rotulo_id: r }))), visitas: S.visitas || [], viagens: S.viagens || [], paradas: S.paradas || [] };
       baixarArquivo(`por-onde-andei-${hoje}.json`, JSON.stringify(dados, null, 2), 'application/json');
       toast('Cópia baixada');
     };
