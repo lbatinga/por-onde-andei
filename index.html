@@ -1139,7 +1139,7 @@ function atualizaTudo() {
     ['outro', c.outro, 'Outros'],
   ];
   const ICONE_ABA = { paises: ICONES.pais, estados: ICONES.outro, cidade: ICONES.cidade, unesco: ICONES.unesco, transporte: ICONES.aeroporto, atracao: ICONES.atracao, museu: ICONES.museu, outro: ICONES.outro };
-  $('#contadores').innerHTML = itens.filter(([k, v]) => k !== 'outro' || v).map(([k, v, t]) =>
+  $('#contadores').innerHTML = itens.filter(([k, v]) => k !== 'outro' || v > 0 || S.lugares.some(l => l.tipo === 'outro')).map(([k, v, t]) =>
     `<button class="contador" data-aba="${k}" aria-pressed="${S.aba === k}" title="${t}">${ICONE_ABA[k] || ''}<b>${v}</b></button>`).join('');
   renderLista(); desenhaBase();
 }
@@ -1181,8 +1181,8 @@ function renderLista() {
       cont.set(k, (cont.get(k) || 0) + 1);
       if (!det.has(k)) det.set(k, {}); const d = det.get(k); d[l.tipo] = (d[l.tipo] || 0) + 1;
     }
-    const UM = { cidade: 'cidade', unesco: 'UNESCO', aeroporto: 'aeroporto', porto: 'porto', atracao: 'atração', outro: 'outro lugar' };
-    const VARIOS = { cidade: 'cidades', unesco: 'UNESCO', aeroporto: 'aeroportos', porto: 'portos', atracao: 'atrações', outro: 'outros lugares' };
+    const UM = { cidade: 'cidade', unesco: 'UNESCO', aeroporto: 'aeroporto', porto: 'porto', atracao: 'atração', museu: 'museu', outro: 'outro lugar' };
+    const VARIOS = { cidade: 'cidades', unesco: 'UNESCO', aeroporto: 'aeroportos', porto: 'portos', atracao: 'atrações', museu: 'museus', outro: 'outros lugares' };
     // sempre as mesmas colunas, na mesma ordem; zero fica apagado
     const COLS = [['cidade', 'Cidades'], ['unesco', 'UNESCO'], ['aeroporto', 'Aeroportos'], ['porto', 'Portos'], ['atracao', 'Atrações e parques']];
     const resumoHtml = k => `<span class="conts">${COLS.map(([t, nome]) => { const n = det.get(k)?.[t] || 0; return `<span class="${n ? '' : 'zero'}" title="${nome}">${ICONES[t]}${n}</span>`; }).join('')}</span>`;
@@ -1292,7 +1292,7 @@ const cidadeJaCadastrada = m => S.lugares.find(l => l.tipo === 'cidade' && (l.re
 /* ================= Formulário de lugar ================= */
 function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
   const loc = localizar(l.lat, l.lon, l.pais);
-  const opcoesTipo = Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${l.tipo === k ? 'selected' : ''}>${v.um}</option>`).join('');
+  const opcoesTipo = Object.entries(TIPOS).filter(([k]) => k !== 'outro' || l.tipo === 'outro').map(([k, v]) => `<option value="${k}" ${l.tipo === k ? 'selected' : ''}>${v.um}</option>`).join('');
   const chips = S.rotulos.map(r => `<button type="button" class="chip" style="--c:${esc(r.cor)}" data-r="${r.id}" aria-pressed="${rotSel.has(r.id)}" ${rotuloServe(r, l.tipo || 'cidade') || rotSel.has(r.id) ? '' : 'hidden'}>${esc(r.nome)}</button>`).join('');
   abreModal(`
     <h3>${esc(titulo)}</h3>
@@ -1374,11 +1374,9 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
       const perto = municipiosProximos(l.lat, l.lon, 4);
       aviso.hidden = false;
       aviso.innerHTML = `<b>“${esc(nome)}” não é município${uf ? ' de ' + esc(nomeEstado(loc.estado)) : ''}.</b>
-        <span>Pela regra do app, só município conta como cidade. Escolha o município, ou salve como outro tipo de lugar.</span>
-        <div class="chips">${perto.map(p => `<button type="button" class="chip" style="--c:var(--visit)" data-mun="${p.cod}">${esc(p.nome)} · ${p.uf}</button>`).join('')}
-        <button type="button" class="chip" style="--c:var(--map-border)" data-outro="1">Salvar como Outro lugar</button></div>`;
+        <span>Pela regra do app, só município conta como cidade. Escolha o município a que ele pertence.</span>
+        <div class="chips">${perto.map(p => `<button type="button" class="chip" style="--c:var(--visit)" data-mun="${p.cod}">${esc(p.nome)} · ${p.uf}</button>`).join('')}</div>`;
       aviso.querySelectorAll('[data-mun]').forEach(b => b.onclick = () => { campoNome.value = S.munPorCod.get(b.dataset.mun).nome; aviso.hidden = true; });
-      aviso.querySelector('[data-outro]').onclick = () => { campoTipo.value = 'outro'; aviso.hidden = true; };
       return { ok: false };
     }
 
@@ -1449,6 +1447,7 @@ async function novoLugarEm(lat, lon) {
       sugestoes = [cidade, r.name].filter(Boolean);
     }
     tipo = r.name && r.name !== cidade ? tipoDoResultado(r) : 'cidade';
+    if (tipo === 'bairro') tipo = 'cidade';
   } catch {}
   sugestoes = [...new Set(sugestoes)].slice(0, 5);
   novoLugar({ lat, lon, tipo, nome: '' }, sugestoes.length ? sugestoes : null);
@@ -1504,9 +1503,10 @@ function tipoDoResultado(r) {
   const c = r.category || r.class, t = r.type;
   if (c === 'aeroway') return 'aeroporto';
   if (t === 'harbour' || t === 'ferry_terminal' || t === 'port' || (c === 'landuse' && t === 'harbour')) return 'porto';
-  if (c === 'place' || c === 'boundary') return NAO_CIDADE.has(t) || NAO_CIDADE.has(r.addresstype) ? 'outro' : 'cidade';
+  if (t === 'museum' || r.addresstype === 'museum') return 'museu';
+  if (c === 'place' || c === 'boundary') return NAO_CIDADE.has(t) || NAO_CIDADE.has(r.addresstype) ? 'bairro' : 'cidade';
   if (['tourism', 'historic', 'leisure', 'natural', 'amenity', 'building', 'man_made'].includes(c)) return 'atracao';
-  return 'outro';
+  return 'atracao'; // estação, igreja, prédio, parque…: ponto de visita
 }
 function buscaPaises(q, qtd = 3) {
   const n = norm(q); if (n.length < 2) return [];
@@ -1572,7 +1572,7 @@ async function buscar(q) {
     const mundo = r.filter(x => {
       const t = tipoDoResultado(x), cc = (x.address?.country_code || '').toUpperCase();
       if (t === 'cidade' && cc === 'BR') return false;
-      if ((x.category || x.class) === 'place' && t === 'outro') return false;
+      if (t === 'bairro') return false; // povoado e bairro não entram (não são município)
       return true;
     }).filter((x, i, arr) => {
       // mesmo nome a menos de 50 km (cidade e o departamento/distrito de mesmo nome): fica só o primeiro
@@ -1603,7 +1603,7 @@ function abreRotulos() {
         </select>
         <select class="conta onde" aria-label="Onde ${esc(r.nome)} aparece">
           <option value="" ${!r.tipos?.length ? 'selected' : ''}>Aparece em todos os tipos de lugar</option>
-          ${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${r.tipos?.length === 1 && r.tipos[0] === k ? 'selected' : ''}>Só em ${v.curto.toLowerCase()}</option>`).join('')}
+          ${Object.entries(TIPOS).filter(([k]) => k !== 'outro').map(([k, v]) => `<option value="${k}" ${r.tipos?.length === 1 && r.tipos[0] === k ? 'selected' : ''}>Só em ${v.curto.toLowerCase()}</option>`).join('')}
         </select>
       </div>`).join('');
     m.querySelectorAll('.rot-edit').forEach(div => {
