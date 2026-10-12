@@ -301,6 +301,12 @@ button { cursor: pointer; }
 .rot-edit .conta { grid-column: 2 / 4; font-size: .85rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 .rot-edit select.conta { grid-column: 1 / -1; width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); color: var(--ink); font: inherit; font-size: .85rem; }
 .trecho { display: flex; align-items: center; gap: 8px; padding: 2px 0 2px 34px; font-size: .8rem; color: var(--muted); list-style: none; }
+.chip[hidden], .marca[hidden] { display: none !important; }
+.escolha-mun { display: grid; gap: 4px; max-height: 50vh; overflow: auto; margin: 8px 0; }
+.escolha-mun label { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); cursor: pointer; }
+.escolha-mun input { width: 18px; height: 18px; accent-color: var(--visit); flex: none; }
+.escolha-mun span { display: grid; }
+.escolha-mun small { color: var(--muted); }
 .trecho span { white-space: nowrap; }
 .trecho select { width: auto; flex: 0 0 auto; padding: 3px 6px; border: 1px dashed var(--line); border-radius: 99px; background: transparent; color: var(--ink); font: inherit; font-size: .8rem; }
 .resumo-import { background: var(--surface-2); border-radius: 8px; padding: 12px; font-size: .9rem; display: grid; gap: 4px; }
@@ -418,7 +424,7 @@ const ROTULOS_PADRAO = [
   { nome: 'Estive', cor: '#3b82f6', ordem: 1, conta_como_visita: true },
   { nome: 'Quero ir', cor: '#e0a526', ordem: 2, conta_como_visita: false },
   { nome: 'Favorito', cor: '#e11d48', ordem: 3, conta_como_visita: false },
-  { nome: 'Escala', cor: '#64748b', ordem: 4, conta_como_visita: true },
+  { nome: 'Escala', cor: '#64748b', ordem: 4, conta_como_visita: true, tipos: ['aeroporto'] },
 ];
 
 /* ================= Estado ================= */
@@ -599,6 +605,11 @@ async function carregaDados() {
   salvaCopia();
 }
 const rotulosDe = id => S.lr.get(id) || new Map();
+// rótulo pode valer só para alguns tipos (ex.: Escala só em aeroportos)
+const rotuloServe = (r, tipo) => !r.tipos?.length || r.tipos.includes(tipo);
+const rotulosPara = tipo => S.rotulos.filter(r => rotuloServe(r, tipo));
+const TIPOS_DA_ABA = { transporte: ['aeroporto', 'porto'] };
+const rotulosDaAba = aba => S.rotulos.filter(r => !r.tipos?.length || (TIPOS_DA_ABA[aba] || [aba]).some(t => r.tipos.includes(t)));
 const idsVisita = () => new Set(S.rotulos.filter(r => r.conta_como_visita).map(r => r.id));
 // rótulos como "Escala": contam o lugar (aeroporto entra na contagem), mas não pintam país nem estado
 const idsSoLugar = () => new Set(S.rotulos.filter(r => r.so_lugar && !r.conta_como_visita).map(r => r.id));
@@ -628,47 +639,93 @@ async function alternaRotulo(lugarId, rotuloId) {
 
 
 /* ================= Cidade automática ================= */
-// Marcou aeroporto, porto, UNESCO ou atração como visitado? A cidade onde ele fica
-// ganha o rótulo de visita também (com Desfazer). Precisa de internet para descobrir o município.
+// Marcou aeroporto, porto, UNESCO ou atração como visitado? A cidade onde ele fica ganha o
+// rótulo de visita também (com Desfazer). Patrimônio ou parque que pega vários municípios
+// (lista da Wikidata em viagem_base_municipios) abre a escolha "Por quais você passou?".
+const rotuloVisitaPadrao = () => S.rotulos.find(r => r.conta_como_visita && norm(r.nome) === 'estive') || S.rotulos.find(r => r.conta_como_visita);
+function cidadeExistente(c) {
+  if (c.ref) { const m = S.munPorCod?.get(c.ref.slice(5)); if (m) return cidadeJaCadastrada(m); }
+  return S.lugares.find(x => x.tipo === 'cidade' && norm(x.nome) === norm(c.nome) && distKm(x.lat, x.lon, c.lat, c.lon) < 60);
+}
+// garante a cidade cadastrada e com o rótulo de visita; devolve a cidade se mudou algo
+async function marcaCandidato(c, rot) {
+  let cidade = cidadeExistente(c);
+  if (cidade && visitado(cidade.id)) return null;
+  if (!cidade) {
+    cidade = { id: novoId(), notas: null, tipo: 'cidade', nome: c.nome, lat: c.lat, lon: c.lon, pais: c.pais, estado: c.estado, ref_externa: c.ref || null };
+    const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugares', linha: cidade }); if (error) return null;
+    S.lugares.push(cidade);
+  }
+  const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugar_rotulos', linha: { lugar_id: cidade.id, rotulo_id: rot.id } }); if (error) return null;
+  const m = rotulosDe(cidade.id); m.set(rot.id, null); S.lr.set(cidade.id, m);
+  return cidade;
+}
+function avisaMarcadas(cidades, rot) {
+  cidades = cidades.filter(Boolean); if (!cidades.length) return;
+  atualizaTudo();
+  const nomes = cidades.map(c => c.nome);
+  toast(`${nomes.length > 2 ? nomes.slice(0, 2).join(', ') + ` e mais ${nomes.length - 2}` : nomes.join(' e ')} ${nomes.length > 1 ? 'marcadas' : 'marcada'} também`, 5000,
+    { rotulo: 'Desfazer', fn: async () => { for (const c of cidades) if (rotulosDe(c.id).has(rot.id)) await alternaRotulo(c.id, rot.id); } });
+}
+async function municipiosDaBase(l) {
+  if (!/^(unesco|parque):/.test(l.ref_externa || '')) return [];
+  let { data, error } = await supa.from('viagem_base_municipios').select('nome,ibge,lat,lon,pais').eq('ref', l.ref_externa);
+  if (error || !data?.length) return [];
+  data = data.filter(x => !(x.pais === 'BR' && !x.ibge)); // no Brasil, só município de verdade
+  if (data.some(x => x.ibge)) await carregaMunicipios().catch(() => {});
+  const vistos = new Set();
+  return data.map(x => {
+    const m = x.ibge && S.munPorCod?.get(x.ibge);
+    const c = m ? { nome: m.nome, lat: m.lat, lon: m.lon, pais: 'BR', estado: 'BR-' + m.uf, ref: refIbge(m) }
+      : { nome: x.nome, lat: x.lat, lon: x.lon, pais: x.pais || l.pais, estado: localizar(x.lat, x.lon, x.pais || l.pais).estado, ref: null };
+    return c;
+  }).filter(c => { const k = c.ref || norm(c.nome); if (vistos.has(k)) return false; vistos.add(k); return true; })
+    .sort((a, b) => distKm(a.lat, a.lon, l.lat, l.lon) - distKm(b.lat, b.lon, l.lat, l.lon));
+}
+function escolheMunicipios(l, cands, rot) {
+  const ja = c => { const e = cidadeExistente(c); return e && visitado(e.id); };
+  const algumJa = cands.some(ja);
+  abreModal(`<h3>Por quais cidades você passou?</h3>
+    <p class="meta">${esc(l.nome)} fica em ${cands.length} municípios. Marque só os que você visitou.</p>
+    <div class="escolha-mun">${cands.map((c, i) => `<label><input type="checkbox" data-i="${i}" ${ja(c) ? 'checked disabled' : (!algumJa && i === 0 ? 'checked' : '')}>
+      <span><b>${esc(c.nome)}</b><small>${esc(nomeEstado(c.estado) || nomePais(c.pais))}${ja(c) ? ' · já marcada' : ''}</small></span></label>`).join('')}</div>
+    <div class="acoes"><button class="btn" id="em-nenhuma">Nenhuma</button><button class="btn principal" id="em-ok">Marcar</button></div>`, (m, fechar) => {
+    m.querySelector('#em-nenhuma').onclick = fechar;
+    m.querySelector('#em-ok').onclick = async ev => {
+      ev.target.disabled = true;
+      const escolhidos = [...m.querySelectorAll('input[data-i]:checked:not(:disabled)')].map(x => cands[+x.dataset.i]);
+      const feitas = []; for (const c of escolhidos) feitas.push(await marcaCandidato(c, rot));
+      fechar(); avisaMarcadas(feitas, rot);
+    };
+  });
+}
 async function marcaCidadeDe(lugarId) {
   const l = S.lugares.find(x => x.id === lugarId);
   if (!l || l.tipo === 'cidade' || S.publico || !navigator.onLine) return;
-  const vis = idsVisita(); if (!visitado(l.id, vis)) return;
-  const rot = S.rotulos.find(r => r.conta_como_visita && norm(r.nome) === 'estive') || S.rotulos.find(r => r.conta_como_visita);
-  if (!rot) return;
+  if (!visitado(l.id)) return;
+  const rot = rotuloVisitaPadrao(); if (!rot) return;
   try {
+    const cands = await municipiosDaBase(l);
+    if (cands.length >= 2) return escolheMunicipios(l, cands, rot);
+    if (cands.length === 1) return avisaMarcadas([await marcaCandidato(cands[0], rot)], rot);
+    // sem lista: o município do ponto, pelo mapa
     const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${l.lat}&lon=${l.lon}&zoom=10&addressdetails=1&accept-language=pt-BR`).then(r => r.json());
     const a = r.address || {};
     const nome = a.city || a.town || a.municipality || a.village || (l.estado === 'BR-DF' ? 'Brasília' : null);
     if (!nome) return;
-    let cidade, nova = null;
+    let c;
     if (l.pais === 'BR') {
       await carregaMunicipios();
       const m = municipioPorNome(nome, ufDe(l.estado)); if (!m) return;
-      cidade = cidadeJaCadastrada(m);
-      if (!cidade) nova = { tipo: 'cidade', nome: m.nome, lat: m.lat, lon: m.lon, pais: 'BR', estado: l.estado, ref_externa: refIbge(m) };
+      c = { nome: m.nome, lat: m.lat, lon: m.lon, pais: 'BR', estado: l.estado, ref: refIbge(m) };
     } else {
-      cidade = S.lugares.find(x => x.tipo === 'cidade' && norm(x.nome) === norm(nome) && distKm(x.lat, x.lon, l.lat, l.lon) < 60);
-      if (!cidade) {
-        // centro da cidade, não o ponto do aeroporto
-        const c = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&city=${encodeURIComponent(nome)}&countrycodes=${(l.pais || '').toLowerCase()}&limit=1&accept-language=pt-BR`).then(r => r.json()).catch(() => []);
-        const lat = c[0] ? +c[0].lat : l.lat, lon = c[0] ? +c[0].lon : l.lon;
-        const loc = localizar(lat, lon, l.pais);
-        nova = { tipo: 'cidade', nome, lat, lon, pais: loc.pais || l.pais, estado: loc.estado || l.estado, ref_externa: null };
+      c = { nome, lat: l.lat, lon: l.lon, pais: l.pais, estado: l.estado, ref: null };
+      if (!cidadeExistente(c)) { // centro da cidade, não o ponto do aeroporto
+        const s = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&city=${encodeURIComponent(nome)}&countrycodes=${(l.pais || '').toLowerCase()}&limit=1&accept-language=pt-BR`).then(r => r.json()).catch(() => []);
+        if (s[0]) { c.lat = +s[0].lat; c.lon = +s[0].lon; const loc = localizar(c.lat, c.lon, l.pais); c.estado = loc.estado || l.estado; }
       }
     }
-    if (cidade && visitado(cidade.id, vis)) return; // já conta
-    if (nova) {
-      cidade = { id: novoId(), notas: null, ...nova };
-      const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugares', linha: cidade });
-      if (error) return;
-      S.lugares.push(cidade);
-    }
-    const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugar_rotulos', linha: { lugar_id: cidade.id, rotulo_id: rot.id } });
-    if (error) return;
-    const m = rotulosDe(cidade.id); m.set(rot.id, null); S.lr.set(cidade.id, m);
-    atualizaTudo();
-    toast(`${cidade.nome} marcada também`, 5000, { rotulo: 'Desfazer', fn: () => alternaRotulo(cidade.id, rot.id) });
+    avisaMarcadas([await marcaCandidato(c, rot)], rot);
   } catch {}
 }
 
@@ -711,7 +768,7 @@ const FAMA_MINIMA = 45;
 const basePorAba = aba => aba === 'unesco' ? (S.baseUnesco || []) : aba === 'transporte' ? (S.baseAero || []) : aba === 'atracao' ? (S.baseAtr || []) : [];
 const lugarDaRef = ref => S.lugares.find(l => l.ref_externa === ref);
 function linhaBase(b) {
-  const marcas = S.rotulos.map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="false" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-base="${esc(b.ref)}" data-r="${r.id}">${CHECK}</button>`).join('');
+  const marcas = rotulosPara(b.tipo).map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="false" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-base="${esc(b.ref)}" data-r="${r.id}">${CHECK}</button>`).join('');
   const estiloTipo = b.tipo === 'unesco' ? ` style="color:${CATEGORIAS[b.cat].cor};border-color:${CATEGORIAS[b.cat].cor}"` : '';
   const estiloT = estiloTipo || (b.tipo === 'atracao' ? ` style="color:${corBase(b)};border-color:${corBase(b)}"` : '');
   return `<div class="item base"><span class="tipo"${estiloT}>${iconeDe(b)}</span>
@@ -947,7 +1004,7 @@ function linhaLugar(l) {
   const local = [nomeEstado(l.estado), nomePais(l.pais)].filter(Boolean).join(', ');
   const marcas = S.publico
     ? S.rotulos.filter(r => m.has(r.id)).map(r => `<span class="selo" style="--c:${esc(r.cor)}">${esc(r.nome)}</span>`).join('')
-    : S.rotulos.map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="${m.has(r.id)}" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-l="${l.id}" data-r="${r.id}">${CHECK}</button>`).join('');
+    : S.rotulos.filter(r => rotuloServe(r, l.tipo) || m.has(r.id)).map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="${m.has(r.id)}" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-l="${l.id}" data-r="${r.id}">${CHECK}</button>`).join('');
   const estiloTipo = l.tipo === 'unesco' ? ` style="color:#fff;border:0;background:${fundoCat(catDe(l.ref_externa))}"` : '';
   return `<div class="item"><span class="tipo"${estiloTipo}>${iconeDe(l)}</span>
     <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : ehParque(l) ? 'Parque nacional' : '', local || TIPOS[l.tipo].um, visitasDe(l.id)[0] ? fmtVisita(visitasDe(l.id)[0]) : ''].filter(Boolean).join(' · '))}</small></button>
@@ -966,7 +1023,7 @@ function renderLista() {
   const f = norm(S.filtro), aba = S.aba, visivel = noMapa();
   $('#cab-rotulos').hidden = aba === 'paises' || aba === 'estados';
   if (S.filtroRot && !S.rotulos.some(r => r.id === S.filtroRot)) S.filtroRot = null;
-  $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? '' : S.rotulos.map(r => `<button class="filtro-rot" data-filtro-rot="${r.id}" aria-pressed="${S.filtroRot === r.id}" title="Mostrar só ${esc(r.nome)}"><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</button>`).join('')
+  $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? '' : rotulosDaAba(aba).map(r => `<button class="filtro-rot" data-filtro-rot="${r.id}" aria-pressed="${S.filtroRot === r.id}" title="Mostrar só ${esc(r.nome)}"><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</button>`).join('')
     + (S.filtroRot ? '<button class="filtro-limpa" data-filtro-rot="">Mostrar todos</button>' : '');
   const titulos = { paises: 'Países', estados: 'Estados e províncias', transporte: 'Aeroportos e portos' };
   $('#painel-titulo').textContent = titulos[aba] || TIPOS[aba].nome;
@@ -1078,7 +1135,7 @@ const cidadeJaCadastrada = m => S.lugares.find(l => l.tipo === 'cidade' && (l.re
 function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
   const loc = localizar(l.lat, l.lon, l.pais);
   const opcoesTipo = Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${l.tipo === k ? 'selected' : ''}>${v.um}</option>`).join('');
-  const chips = S.rotulos.map(r => `<button type="button" class="chip" style="--c:${esc(r.cor)}" data-r="${r.id}" aria-pressed="${rotSel.has(r.id)}">${esc(r.nome)}</button>`).join('');
+  const chips = S.rotulos.map(r => `<button type="button" class="chip" style="--c:${esc(r.cor)}" data-r="${r.id}" aria-pressed="${rotSel.has(r.id)}" ${rotuloServe(r, l.tipo || 'cidade') || rotSel.has(r.id) ? '' : 'hidden'}>${esc(r.nome)}</button>`).join('');
   abreModal(`
     <h3>${esc(titulo)}</h3>
     ${sugestoes ? `<div class="campo"><span class="rotulo-campo">Sugestões de nome</span><div class="chips">${sugestoes.map(s => `<button type="button" class="chip sug" style="--c:var(--map-border)" data-s="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>` : ''}
@@ -1142,7 +1199,11 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
     m.querySelectorAll('.chip.sug').forEach(b => b.onclick = () => { campoNome.value = b.dataset.s; aviso.hidden = true; });
     m.querySelector('#f-cancelar').onclick = fechar;
     campoNome.addEventListener('input', () => { aviso.hidden = true; });
-    campoTipo.addEventListener('change', () => { aviso.hidden = true; });
+    campoTipo.addEventListener('change', () => {
+      aviso.hidden = true;
+      // esconde rótulos que não valem para o tipo novo (e desmarca)
+      m.querySelectorAll('#f-chips .chip').forEach(b => { const r = S.rotulos.find(x => x.id === b.dataset.r), ok = rotuloServe(r, campoTipo.value); b.hidden = !ok; if (!ok) { sel.delete(r.id); b.setAttribute('aria-pressed', 'false'); } });
+    });
     if (aoExcluir) botaoDuploToque(m.querySelector('#f-excluir'), async () => { await aoExcluir(); fechar(); });
 
     // No Brasil, cidade precisa ser município do IBGE
@@ -1360,6 +1421,10 @@ function abreRotulos() {
           <option value="lugar" ${!r.conta_como_visita && r.so_lugar ? 'selected' : ''}>Conta só o lugar (escala: não pinta país nem estado)</option>
           <option value="nao" ${!r.conta_como_visita && !r.so_lugar ? 'selected' : ''}>Não conta (lista de desejos)</option>
         </select>
+        <select class="conta onde" aria-label="Onde ${esc(r.nome)} aparece">
+          <option value="" ${!r.tipos?.length ? 'selected' : ''}>Aparece em todos os tipos de lugar</option>
+          ${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${r.tipos?.length === 1 && r.tipos[0] === k ? 'selected' : ''}>Só em ${v.curto.toLowerCase()}</option>`).join('')}
+        </select>
       </div>`).join('');
     m.querySelectorAll('.rot-edit').forEach(div => {
       const r = S.rotulos.find(x => x.id === div.dataset.id);
@@ -1370,7 +1435,8 @@ function abreRotulos() {
       };
       div.querySelector('input[type=color]').onchange = e => salvar({ cor: e.target.value });
       div.querySelector('input[type=text]').onchange = e => { const n = e.target.value.trim(); if (n) salvar({ nome: n }); else e.target.value = r.nome; };
-      div.querySelector('select.conta').onchange = e => salvar({ conta_como_visita: e.target.value === 'visita', so_lugar: e.target.value === 'lugar' });
+      div.querySelector('select.onde').onchange = e => salvar({ tipos: e.target.value ? [e.target.value] : null });
+      div.querySelector('select.conta:not(.onde)').onchange = e => salvar({ conta_como_visita: e.target.value === 'visita', so_lugar: e.target.value === 'lugar' });
       botaoDuploToque(div.querySelector('.perigo'), async () => {
         const { error } = await supa.from('viagem_rotulos').delete().eq('id', r.id);
         if (error) return toast('Erro: ' + error.message);
