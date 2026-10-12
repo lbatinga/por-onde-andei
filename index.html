@@ -418,7 +418,7 @@ const ROTULOS_PADRAO = [
   { nome: 'Estive', cor: '#3b82f6', ordem: 1, conta_como_visita: true },
   { nome: 'Quero ir', cor: '#e0a526', ordem: 2, conta_como_visita: false },
   { nome: 'Favorito', cor: '#e11d48', ordem: 3, conta_como_visita: false },
-  { nome: 'Escala', cor: '#64748b', ordem: 4, conta_como_visita: false, so_lugar: true },
+  { nome: 'Escala', cor: '#64748b', ordem: 4, conta_como_visita: true },
 ];
 
 /* ================= Estado ================= */
@@ -623,6 +623,53 @@ async function alternaRotulo(lugarId, rotuloId) {
     m.set(rotuloId, null); S.lr.set(lugarId, m);
   }
   atualizaTudo();
+  if (!tinha) marcaCidadeDe(lugarId);
+}
+
+
+/* ================= Cidade automática ================= */
+// Marcou aeroporto, porto, UNESCO ou atração como visitado? A cidade onde ele fica
+// ganha o rótulo de visita também (com Desfazer). Precisa de internet para descobrir o município.
+async function marcaCidadeDe(lugarId) {
+  const l = S.lugares.find(x => x.id === lugarId);
+  if (!l || l.tipo === 'cidade' || S.publico || !navigator.onLine) return;
+  const vis = idsVisita(); if (!visitado(l.id, vis)) return;
+  const rot = S.rotulos.find(r => r.conta_como_visita && norm(r.nome) === 'estive') || S.rotulos.find(r => r.conta_como_visita);
+  if (!rot) return;
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${l.lat}&lon=${l.lon}&zoom=10&addressdetails=1&accept-language=pt-BR`).then(r => r.json());
+    const a = r.address || {};
+    const nome = a.city || a.town || a.municipality || a.village || (l.estado === 'BR-DF' ? 'Brasília' : null);
+    if (!nome) return;
+    let cidade, nova = null;
+    if (l.pais === 'BR') {
+      await carregaMunicipios();
+      const m = municipioPorNome(nome, ufDe(l.estado)); if (!m) return;
+      cidade = cidadeJaCadastrada(m);
+      if (!cidade) nova = { tipo: 'cidade', nome: m.nome, lat: m.lat, lon: m.lon, pais: 'BR', estado: l.estado, ref_externa: refIbge(m) };
+    } else {
+      cidade = S.lugares.find(x => x.tipo === 'cidade' && norm(x.nome) === norm(nome) && distKm(x.lat, x.lon, l.lat, l.lon) < 60);
+      if (!cidade) {
+        // centro da cidade, não o ponto do aeroporto
+        const c = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&city=${encodeURIComponent(nome)}&countrycodes=${(l.pais || '').toLowerCase()}&limit=1&accept-language=pt-BR`).then(r => r.json()).catch(() => []);
+        const lat = c[0] ? +c[0].lat : l.lat, lon = c[0] ? +c[0].lon : l.lon;
+        const loc = localizar(lat, lon, l.pais);
+        nova = { tipo: 'cidade', nome, lat, lon, pais: loc.pais || l.pais, estado: loc.estado || l.estado, ref_externa: null };
+      }
+    }
+    if (cidade && visitado(cidade.id, vis)) return; // já conta
+    if (nova) {
+      cidade = { id: novoId(), notas: null, ...nova };
+      const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugares', linha: cidade });
+      if (error) return;
+      S.lugares.push(cidade);
+    }
+    const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugar_rotulos', linha: { lugar_id: cidade.id, rotulo_id: rot.id } });
+    if (error) return;
+    const m = rotulosDe(cidade.id); m.set(rot.id, null); S.lr.set(cidade.id, m);
+    atualizaTudo();
+    toast(`${cidade.nome} marcada também`, 5000, { rotulo: 'Desfazer', fn: () => alternaRotulo(cidade.id, rot.id) });
+  } catch {}
 }
 
 /* ================= Bases prontas: UNESCO e aeroportos ================= */
@@ -684,6 +731,7 @@ async function marcaBase(ref, rotuloId) {
   const { error: e2 } = await grava({ tipo: 'inserir', tabela: 'viagem_lugar_rotulos', linha: { lugar_id: data.id, rotulo_id: rotuloId } });
   if (e2) toast('Lugar salvo, mas o rótulo falhou: ' + e2.message); else S.lr.set(data.id, new Map([[rotuloId, null]]));
   atualizaTudo();
+  marcaCidadeDe(data.id);
 }
 function abreBase(ref) {
   const b = acharBase(ref); if (!b) return;
@@ -1144,6 +1192,7 @@ async function salvaRotulosDoLugar(id, sel) {
   if (por.length) { const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugar_rotulos', linha: por.map(r => ({ lugar_id: id, rotulo_id: r })) }); if (error) throw error; }
   const m = new Map(); sel.forEach(r => m.set(r, atual.get(r) ?? null));
   if (m.size) S.lr.set(id, m); else S.lr.delete(id);
+  if (por.length) setTimeout(() => marcaCidadeDe(id), 300);
 }
 function novoLugar(dados, sugestoes) {
   const padrao = S.rotulos.find(r => r.conta_como_visita);
