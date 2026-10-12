@@ -1537,7 +1537,29 @@ function ligaResultados(box, mundo) {
     const nome = x.name || x.display_name.split(',')[0];
     const ja = S.lugares.find(l => norm(l.nome) === norm(nome) && distKm(l.lat, l.lon, lat, lon) < 15);
     if (ja) return abreLugar(ja.id);
-    novoLugar({ lat, lon, tipo: tipoDoResultado(x), nome, pais: (x.address?.country_code || '').toUpperCase() });
+    const dados = { lat, lon, tipo: tipoDoResultado(x), nome, pais: (x.address?.country_code || '').toUpperCase() };
+    confereMuseuOficial(dados).then(ok => ok && novoLugar(dados));
+  });
+}
+// Antes de criar um museu ou atração no Brasil pela busca, procura o mesmo lugar na lista oficial do IBRAM
+// (o nome no mapa costuma ser diferente: "Casa Museu Marechal Deodoro" x "Casa de Marechal Deodoro").
+const PALAVRAS_VAZIAS = new Set(['de', 'do', 'da', 'dos', 'das', 'e', 'o', 'a', 'museu', 'casa', 'memorial', 'centro', 'cultural', 'espaco', 'municipal', 'historico', 'historica']);
+const palavras = t => new Set(norm(t).split(/[^a-z0-9]+/).filter(w => w.length > 2 && !PALAVRAS_VAZIAS.has(w)));
+async function confereMuseuOficial(d) {
+  if (d.pais !== 'BR' || !['museu', 'atracao'].includes(d.tipo)) return true;
+  let base; try { base = await carregaBase('museu'); } catch { return true; }
+  const minhas = palavras(d.nome);
+  const cands = base.map(b => ({ b, km: distKm(d.lat, d.lon, b.lat, b.lon), comuns: [...palavras(b.nome)].filter(w => minhas.has(w)).length }))
+    .filter(c => c.km < 3 && (c.comuns > 0 || c.km < 0.3)).sort((a, b) => b.comuns - a.comuns || a.km - b.km).slice(0, 4);
+  if (!cands.length) return true;
+  return new Promise(ok => {
+    const fechar = abreModal(`<h3>Este museu está no cadastro oficial?</h3>
+      <p class="meta">Você buscou “${esc(d.nome)}”. Perto dali, o Cadastro Nacional de Museus (IBRAM) tem:</p>
+      <div class="escolha-mun">${cands.map((c, i) => `<button type="button" class="btn" data-of="${i}" style="text-align:left;display:grid"><b>${esc(c.b.nome)}</b><small class="meta">${esc(c.b.sub)} · ${c.km < 1 ? Math.round(c.km * 1000) + ' m' : c.km.toFixed(1).replace('.', ',') + ' km'}${lugarDaRef(c.b.ref) ? ' · já está na sua lista' : ''}</small></button>`).join('')}</div>
+      <div class="acoes"><button class="btn" id="of-nao">Não, é outro lugar</button></div>`, (m, f) => {
+      m.querySelectorAll('[data-of]').forEach(b => b.onclick = () => { f(); ok(false); abreBase(cands[+b.dataset.of].b.ref); });
+      m.querySelector('#of-nao').onclick = () => { f(); ok(true); };
+    });
   });
 }
 let digitaTimer;
