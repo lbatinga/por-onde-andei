@@ -489,10 +489,12 @@ const TIPOS = {
   aeroporto: { nome: 'Aeroportos', um: 'Aeroporto', curto: 'Aeroportos' },
   porto:     { nome: 'Portos', um: 'Porto', curto: 'Portos' },
   atracao:   { nome: 'Atrações e parques', um: 'Atração turística', curto: 'Atrações' },
+  museu:     { nome: 'Museus', um: 'Museu', curto: 'Museus' },
   outro:     { nome: 'Outros lugares', um: 'Outro lugar', curto: 'Outros' },
   pais:      { nome: 'Países', um: 'País inteiro', curto: 'Países' },
 };
 const ICONES = {
+  museu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/><circle cx="15.5" cy="8.5" r="1.5"/></svg>',
   pais: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>',
   cidade: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l5-3v16M10 21V10h9v11M13 13h3M13 17h3"/></svg>',
   unesco: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-5 9 5M5 9v9M9.5 9v9M14.5 9v9M19 9v9M3 21h18"/></svg>',
@@ -815,6 +817,11 @@ async function marcaCidadeDe(lugarId) {
   if (!visitado(l.id)) return;
   const rot = rotuloVisitaPadrao(); if (!rot) return;
   try {
+    if (l.tipo === 'museu') {
+      const b = acharBase(l.ref_externa || '');
+      if (b?.municipio) { await carregaMunicipios(); const m = municipioPorNome(b.municipio, b.uf);
+        if (m) return avisaMarcadas([await marcaCandidato({ nome: m.nome, lat: m.lat, lon: m.lon, pais: 'BR', estado: 'BR-' + m.uf, ref: refIbge(m) }, rot)], rot); }
+    }
     const cands = await municipiosDaBase(l);
     const paises = acharBase(l.ref_externa || '')?.paises || [];
     if (paises.length > 1) {
@@ -850,7 +857,7 @@ async function marcaCidadeDe(lugarId) {
 // Parques nacionais ficam no tipo "atracao" com referência parque:<id> (aba Atrações e parques)
 const ehParque = x => (x.ref_externa || x.ref || '').startsWith('parque:');
 const iconeDe = x => ehParque(x) ? ICONES.parque : ICONES[x.tipo];
-const corBase = b => b.tipo === 'unesco' ? CATEGORIAS[b.cat].cor : ehParque(b) ? '#16a34a' : b.tipo === 'atracao' ? '#ea580c' : '#6b7c7d';
+const corBase = b => b.tipo === 'unesco' ? CATEGORIAS[b.cat].cor : ehParque(b) ? '#16a34a' : b.tipo === 'atracao' ? '#ea580c' : b.tipo === 'museu' ? '#8b5cf6' : '#6b7c7d';
 const CATEGORIAS = { cultural: { nome: 'Cultural', cor: '#2563eb' }, natural: { nome: 'Natural', cor: '#16a34a' }, misto: { nome: 'Misto', cor: '#0d9488' } };
 const catDe = ref => (S.baseUnesco || []).find(b => b.ref === ref)?.cat || 'cultural';
 const fundoCat = cat => cat === 'misto' ? 'linear-gradient(135deg,#2563eb 50%,#16a34a 50%)' : CATEGORIAS[cat].cor;
@@ -866,6 +873,9 @@ function carregaBase(tipo) {
   if (tipo === 'aeroporto') return basePromessa.aero ||= fetch('aeroportos.json').then(r => r.json())
     .then(rows => (S.baseAero = rows.map(([iata, nome, lat, lon, cc, cidade, grande]) => ({ ref: 'iata:' + iata, tipo: 'aeroporto', nome, lat, lon, pais: cc, iata, grande, sub: `${iata} · ${[cidade, nomePais(cc)].filter(Boolean).join(', ')}` }))))
     .catch(e => { basePromessa.aero = null; throw e; });
+  if (tipo === 'museu') return basePromessa.museu ||= fetch('museus.json').then(r => r.json())
+    .then(rows => (S.baseMuseu = rows.map(([cod, nome, lat, lon, mun, uf]) => ({ ref: 'ibram:' + cod, tipo: 'museu', nome, lat, lon, pais: 'BR', municipio: mun, uf, sub: [mun, uf].filter(Boolean).join(' · ') }))))
+    .catch(e => { basePromessa.museu = null; throw e; });
   return Promise.resolve([]);
 }
 // A Wikidata às vezes tem dois itens para o mesmo lugar: junta mesmo nome a menos de 30 km
@@ -881,7 +891,7 @@ function semDuplicados(lista) {
 }
 // Regra das atrações: só entra o que é famoso no mundo, com artigo na Wikipédia em pelo menos 45 idiomas
 const FAMA_MINIMA = 45;
-const basePorAba = aba => aba === 'unesco' ? (S.baseUnesco || []) : aba === 'transporte' ? (S.baseAero || []) : aba === 'atracao' ? (S.baseAtr || []) : [];
+const basePorAba = aba => aba === 'unesco' ? (S.baseUnesco || []) : aba === 'transporte' ? (S.baseAero || []) : aba === 'atracao' ? (S.baseAtr || []) : aba === 'museu' ? (S.baseMuseu || []) : [];
 // Porte do aeroporto: top 50 do mundo (ACI) = grande; no Brasil pelo movimento da ANAC
 // (grande a partir de 5 milhões de passageiros/ano, médio de 1 a 5 milhões, pequeno abaixo). Fora disso, sem porte.
 let rankingAero = null;
@@ -907,7 +917,7 @@ function linhaBase(b) {
     <button class="txt" data-abrir-base="${esc(b.ref)}"><b>${esc(b.nome)}</b><small>${esc(b.sub || '')}</small></button>
     <div class="marcas">${marcas}</div></div>`;
 }
-const acharBase = ref => (ref.startsWith('unesco:') ? S.baseUnesco : ref.startsWith('iata:') ? S.baseAero : S.baseAtr)?.find(b => b.ref === ref);
+const acharBase = ref => (ref.startsWith('unesco:') ? S.baseUnesco : ref.startsWith('iata:') ? S.baseAero : ref.startsWith('ibram:') ? S.baseMuseu : S.baseAtr)?.find(b => b.ref === ref);
 // Marcar um item da base cria o lugar na hora, já com o rótulo
 async function marcaBase(ref, rotuloId) {
   const b = acharBase(ref); if (!b) return;
@@ -935,7 +945,7 @@ function desenhaBase() {
   camadaBase.clearLayers();
   if (S.publico) return;
   const base = basePorAba(S.aba); if (!base.length) return;
-  const z = mapa.getZoom(); if (z < (S.aba === 'unesco' ? 3 : S.aba === 'atracao' ? 4 : 5)) return;
+  const z = mapa.getZoom(); if (z < (S.aba === 'unesco' ? 3 : S.aba === 'atracao' ? 4 : S.aba === 'museu' ? 9 : 5)) return;
   const bb = mapa.getBounds().pad(0.05); let n = 0;
   for (const b of base) {
     if (n > 400) break;
@@ -1072,7 +1082,7 @@ function estiloEstado(f) {
   return { stroke: true, fill: z < 7, color: cor, weight: z >= 7 ? 2 : 1, opacity: 0.85, fillColor: cor, fillOpacity: z >= 6 ? 0.12 : 0.28 };
 }
 // Cada aba mostra só os pinos do seu tipo; Países e Estados mostram só a pintura
-const tiposDaAba = aba => ({ cidade: ['cidade'], unesco: ['unesco'], transporte: ['aeroporto', 'porto'], atracao: ['atracao'], outro: ['outro'], paises: [], estados: [] })[aba] || Object.keys(TIPOS).filter(t => t !== 'pais');
+const tiposDaAba = aba => ({ cidade: ['cidade'], unesco: ['unesco'], transporte: ['aeroporto', 'porto'], atracao: ['atracao'], museu: ['museu'], outro: ['outro'], paises: [], estados: [] })[aba] || Object.keys(TIPOS).filter(t => t !== 'pais');
 const abaDeRegiao = () => S.aba === 'paises' || S.aba === 'estados';
 function desenhaPinos() {
   camadaPinos.clearLayers();
@@ -1098,7 +1108,7 @@ function desenhaPinos() {
 function calcula() {
   const vis = idsVisita(), so = idsSoLugar();
   paisesVis = new Set(); paisesQuero = new Set(); estadosVis = new Set(); estadosQuero = new Set();
-  const cont = { cidade: 0, unesco: 0, aeroporto: 0, porto: 0, atracao: 0, outro: 0, pais: 0 };
+  const cont = { cidade: 0, unesco: 0, aeroporto: 0, porto: 0, atracao: 0, museu: 0, outro: 0, pais: 0 };
   for (const l of S.lugares) {
     if (!S.lr.has(l.id)) continue;
     if (visitado(l.id, vis)) {
@@ -1125,9 +1135,10 @@ function atualizaTudo() {
     ['unesco', c.unesco, 'UNESCO'],
     ['transporte', c.aeroporto + c.porto, 'Aerop. e portos'],
     ['atracao', c.atracao, 'Atrações e parques'],
+    ['museu', c.museu, 'Museus'],
     ['outro', c.outro, 'Outros'],
   ];
-  const ICONE_ABA = { paises: ICONES.pais, estados: ICONES.outro, cidade: ICONES.cidade, unesco: ICONES.unesco, transporte: ICONES.aeroporto, atracao: ICONES.atracao, outro: ICONES.outro };
+  const ICONE_ABA = { paises: ICONES.pais, estados: ICONES.outro, cidade: ICONES.cidade, unesco: ICONES.unesco, transporte: ICONES.aeroporto, atracao: ICONES.atracao, museu: ICONES.museu, outro: ICONES.outro };
   $('#contadores').innerHTML = itens.filter(([k, v]) => k !== 'outro' || v).map(([k, v, t]) =>
     `<button class="contador" data-aba="${k}" aria-pressed="${S.aba === k}" title="${t}">${ICONE_ABA[k] || ''}<b>${v}</b></button>`).join('');
   renderLista(); desenhaBase();
@@ -1223,13 +1234,13 @@ function renderLista() {
     const base = S.publico || S.filtroRot ? [] : basePorAba(aba);
     if (base.length) {
       const z = mapa ? mapa.getZoom() : 2;
-      const outros = base.filter(b => !lugarDaRef(b.ref) && visivel(b) && (!f || norm(b.nome + ' ' + b.sub).includes(f)) && (aba !== 'transporte' || b.grande || z >= 6 || f) && (aba !== 'atracao' || !ehParque(b) || z >= 5 || f));
+      const outros = base.filter(b => !lugarDaRef(b.ref) && visivel(b) && (!f || norm(b.nome + ' ' + b.sub).includes(f)) && (aba !== 'transporte' || b.grande || z >= 6 || f) && (aba !== 'atracao' || !ehParque(b) || z >= 5 || f) && (aba !== 'museu' || z >= 8 || f));
       outros.sort((a, b) => (b.rel || 0) - (a.rel || 0) || (b.grande || 0) - (a.grande || 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
-      if (outros.length) html += `<div class="grupo"><span>${aba === 'unesco' ? 'Outros patrimônios nesta área' : aba === 'atracao' ? 'Outras atrações e parques nesta área' : 'Outros aeroportos nesta área'}</span><span>${outros.length}</span></div>`
+      if (outros.length) html += `<div class="grupo"><span>${aba === 'unesco' ? 'Outros patrimônios nesta área' : aba === 'atracao' ? 'Outras atrações e parques nesta área' : aba === 'museu' ? 'Outros museus nesta área' : 'Outros aeroportos nesta área'}</span><span>${outros.length}</span></div>`
         + outros.slice(0, 150).map(linhaBase).join('')
         + (outros.length > 150 ? `<div class="vazio-lista">Mais ${outros.length - 150}. Aproxime o mapa ou filtre pelo nome.</div>` : '');
-    } else if (!S.publico && (aba === 'unesco' || aba === 'transporte' || aba === 'atracao')) {
-      carregaBase(aba === 'unesco' ? 'unesco' : aba === 'atracao' ? 'atracao' : 'aeroporto').then(() => { renderLista(); desenhaBase(); }).catch(() => {});
+    } else if (!S.publico && (aba === 'unesco' || aba === 'transporte' || aba === 'atracao' || aba === 'museu')) {
+      carregaBase(aba === 'unesco' ? 'unesco' : aba === 'atracao' ? 'atracao' : aba === 'museu' ? 'museu' : 'aeroporto').then(() => { renderLista(); desenhaBase(); }).catch(() => {});
     }
     if (!html) html = f ? `<div class="vazio-lista"><b>Nada encontrado</b>Nenhum item com “${esc(S.filtro)}”.</div>`
       : `<div class="vazio-lista"><b>Nenhum item aqui ainda</b>Use a busca lá em cima, toque em “+ Lugar” ou segure o dedo no mapa para adicionar. Se tem dados do Places Been, use Menu › Importar.</div>`;
@@ -2166,7 +2177,7 @@ function abreEstatisticas() {
   const ext = k => cidadesVis.reduce((m, l) => !m || k(l, m) ? l : m, null);
   const norte = ext((a, b) => a.lat > b.lat), sul = ext((a, b) => a.lat < b.lat), leste = ext((a, b) => a.lon > b.lon), oeste = ext((a, b) => a.lon < b.lon);
   const so = idsSoLugar(), porTipo = {}; S.lugares.filter(l => visitado(l.id, vis) || soLugar(l.id, so)).forEach(l => { const t = ehParque(l) ? 'parque' : l.tipo; porTipo[t] = (porTipo[t] || 0) + 1; });
-  const NOMES_T = { cidade: 'Cidades', unesco: 'Patrimônios UNESCO', aeroporto: 'Aeroportos', porto: 'Portos', atracao: 'Atrações', parque: 'Parques nacionais', outro: 'Outros lugares' };
+  const NOMES_T = { cidade: 'Cidades', unesco: 'Patrimônios UNESCO', aeroporto: 'Aeroportos', porto: 'Portos', atracao: 'Atrações', parque: 'Parques nacionais', museu: 'Museus', outro: 'Outros lugares' };
   const porRot = S.rotulos.map(r => [r, S.lugares.filter(l => rotulosDe(l.id).has(r.id)).length]);
   const capitais = CAPITAIS.filter(c => ibgeVis.has(c)).length;
   const c0 = casa();
@@ -2208,6 +2219,7 @@ function abreEstatisticas() {
       ${Object.entries(REGIOES_BR).map(([r, ufs]) => barra(r, ufs.filter(u => ufsBR.has(u)).length, ufs.length)).join('')}
       <h4>Municípios por estado</h4><div id="st-mun-uf"><p class="meta">Carregando…</p></div>
       <h4>Patrimônios da UNESCO</h4><div id="st-unesco"><p class="meta">Carregando…</p></div>
+      <h4>Museus</h4><div id="st-museus"><p class="meta">Carregando…</p></div>
     </section>
     <section data-st-sec="aero" hidden><div id="st-aero"><p class="meta">Carregando…</p></div></section>
     <section data-st-sec="viagens" hidden>
@@ -2261,6 +2273,11 @@ function abreEstatisticas() {
           <span class="aero-pos">${x.mundo ? `<span title="Posição no mundo">🌎 ${x.mundo}º</span>` : ''}${x.br ? `<span title="Posição no Brasil">🇧🇷 ${x.br}º</span>` : ''}${!x.mundo && !x.br ? '<span class="fora">fora do top 50</span>' : ''}</span></div>`).join('')}</div>
         <p class="meta">🌎 top 50 do ACI ${rk.mundo.ano} · 🇧🇷 ANAC ${rk.brasil.ano}</p>`;
     }).catch(() => { const box = m.querySelector('#st-aero'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar o ranking.</p>'; });
+    carregaBase('museu').then(base => {
+      const box = m.querySelector('#st-museus'); if (!box) return;
+      const feitos = new Set(S.lugares.filter(l => l.tipo === 'museu' && visitado(l.id, vis)).map(l => l.ref_externa));
+      box.innerHTML = barra('Visitados', base.filter(b => feitos.has(b.ref)).length, base.length) + '<p class="meta">Museus abertos do Cadastro Nacional de Museus (IBRAM).</p>';
+    }).catch(() => { const box = m.querySelector('#st-museus'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar a lista.</p>'; });
     carregaBase('unesco').then(base => {
       const box = m.querySelector('#st-unesco'); if (!box) return;
       const br = base.filter(b => (b.paises || [b.pais]).includes('BR'));
