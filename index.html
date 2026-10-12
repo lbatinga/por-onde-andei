@@ -164,6 +164,21 @@ button { cursor: pointer; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { border: 2px solid var(--c); background: transparent; border-radius: 999px; padding: 5px 12px; font-weight: 600; font-size: .9rem; }
 .chip[aria-pressed="true"] { background: var(--c); color: #fff; }
+.add-visita { display: flex; gap: 8px; flex-wrap: wrap; }
+.add-visita select, .add-visita input { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 8px 10px; min-width: 0; flex: 1 1 120px; }
+.add-visita .btn { flex: 0 0 auto; padding: 8px 14px; }
+.chip.visita { display: inline-flex; align-items: center; gap: 4px; background: var(--c); color: #fff; padding-right: 4px; }
+.chip.visita button { border: 0; background: rgba(255,255,255,.25); color: #fff; width: 20px; height: 20px; border-radius: 50%; padding: 0; line-height: 1; }
+.linha-tempo { display: grid; gap: 2px; }
+.linha-tempo .ano { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 2px 6px; border-bottom: 2px solid var(--accent); }
+.linha-tempo .ano b { font: 800 1.4rem var(--f-display); }
+.linha-tempo .ano span { color: var(--muted); font-size: .85rem; }
+.linha-tempo .evento { display: flex; gap: 10px; align-items: center; text-align: left; border: 0; background: none; padding: 8px 2px; border-bottom: 1px solid var(--line); }
+.linha-tempo .evento .tipo { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line); flex: none; }
+.linha-tempo .evento .tipo svg { width: 14px; height: 14px; }
+.linha-tempo .evento .txt { min-width: 0; }
+.linha-tempo .evento b { display: block; font-weight: 600; }
+.linha-tempo .evento small { color: var(--muted); }
 .acoes { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 10px 16px; font-weight: 600; }
 .btn.principal { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
@@ -394,6 +409,7 @@ async function carregaDados() {
   S.rotulos = rot;
   S.lugares = await todos(() => supa.from('viagem_lugares').select('*').order('nome'));
   const lr = await todos(() => supa.from('viagem_lugar_rotulos').select('lugar_id,rotulo_id,data'));
+  S.visitas = await todos(() => supa.from('viagem_visitas').select('id,lugar_id,data,precisao,nota').order('data', { ascending: false })).catch(() => []);
   S.lr = new Map();
   for (const x of lr) { if (!S.lr.has(x.lugar_id)) S.lr.set(x.lugar_id, new Map()); S.lr.get(x.lugar_id).set(x.rotulo_id, x.data); }
 }
@@ -501,6 +517,15 @@ function desenhaBase() {
     camadaBase.addLayer(m);
   }
 }
+
+/* ================= Datas de visita ================= */
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const MESES_LONGOS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+function fmtVisita(v) {
+  const [a, m, d] = v.data.split('-');
+  return v.precisao === 'ano' ? a : v.precisao === 'mes' ? `${MESES[+m - 1]}/${a}` : `${d}/${m}/${a}`;
+}
+const visitasDe = id => (S.visitas || []).filter(v => v.lugar_id === id).sort((a, b) => b.data.localeCompare(a.data));
 
 /* ================= Mapa ================= */
 let mapa, camadaPaises, camadaEstados, camadaPinos, camadaRotPaises, camadaRotEstados, fundo;
@@ -672,7 +697,7 @@ function linhaLugar(l) {
   const marcas = S.rotulos.map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="${m.has(r.id)}" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-l="${l.id}" data-r="${r.id}">${CHECK}</button>`).join('');
   const estiloTipo = l.tipo === 'unesco' ? ` style="color:#fff;border:0;background:${fundoCat(catDe(l.ref_externa))}"` : '';
   return `<div class="item"><span class="tipo"${estiloTipo}>${iconeDe(l)}</span>
-    <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : ehParque(l) ? 'Parque nacional' : '', local || TIPOS[l.tipo].um].filter(Boolean).join(' · '))}</small></button>
+    <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : ehParque(l) ? 'Parque nacional' : '', local || TIPOS[l.tipo].um, visitasDe(l.id)[0] ? fmtVisita(visitasDe(l.id)[0]) : ''].filter(Boolean).join(' · '))}</small></button>
     <div class="marcas">${marcas}</div></div>`;
 }
 // A lista mostra só o que está visível no mapa (como no Places Been)
@@ -805,6 +830,14 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
     </div>
     <div class="aviso-mun" id="f-aviso" hidden></div>
     <div class="campo"><span class="rotulo-campo">Rótulos</span><div class="chips" id="f-chips">${chips}</div></div>
+    <div class="campo"><span class="rotulo-campo">Quando esteve</span>
+      <div class="chips" id="f-visitas"></div>
+      <div class="add-visita">
+        <select id="f-prec" aria-label="Precisão da data"><option value="mes">Mês e ano</option><option value="dia">Dia exato</option><option value="ano">Só o ano</option></select>
+        <input id="f-data" type="month" aria-label="Data da visita">
+        <button type="button" class="btn" id="f-add-vis">Adicionar</button>
+      </div>
+    </div>
     <div class="campo"><label for="f-notas">Notas</label><textarea id="f-notas" placeholder="Quando foi, com quem, o que achou…">${esc(l.notas || '')}</textarea></div>
     <div class="meta">${esc([nomeEstado(loc.estado), nomePais(loc.pais)].filter(Boolean).join(', ') || 'Fora de qualquer país')} · ${l.lat.toFixed(4)}, ${l.lon.toFixed(4)}</div>
     <div class="acoes">
@@ -813,6 +846,36 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
       <button class="btn principal" id="f-salvar" type="button">Salvar</button>
     </div>`, (m, fechar) => {
     const sel = new Set(rotSel);
+    // visitas: editadas aqui e gravadas junto com o lugar
+    let visitas = l.id ? visitasDe(l.id).map(v => ({ ...v })) : [];
+    const removidas = [];
+    const desenhaVisitas = () => {
+      const box = m.querySelector('#f-visitas');
+      box.innerHTML = visitas.length ? visitas.sort((a, b) => b.data.localeCompare(a.data)).map((v, i) => `<span class="chip visita" style="--c:var(--visit)">${esc(fmtVisita(v))}<button type="button" data-tira="${i}" aria-label="Remover ${esc(fmtVisita(v))}">×</button></span>`).join('')
+        : '<span class="meta">Nenhuma data ainda</span>';
+      box.querySelectorAll('[data-tira]').forEach(b => b.onclick = () => { const [v] = visitas.splice(+b.dataset.tira, 1); if (v.id) removidas.push(v.id); desenhaVisitas(); });
+    };
+    desenhaVisitas();
+    const campoData = m.querySelector('#f-data'), campoPrec = m.querySelector('#f-prec');
+    campoPrec.onchange = () => {
+      const p = campoPrec.value; campoData.value = '';
+      campoData.type = p === 'dia' ? 'date' : p === 'mes' ? 'month' : 'number';
+      if (p === 'ano') { campoData.min = 1950; campoData.max = new Date().getFullYear() + 1; campoData.placeholder = 'Ano'; }
+    };
+    m.querySelector('#f-add-vis').onclick = () => {
+      const p = campoPrec.value, val = campoData.value.trim();
+      let data = null;
+      if (p === 'dia' && /^\d{4}-\d{2}-\d{2}$/.test(val)) data = val;
+      if (p === 'mes' && /^\d{4}-\d{2}$/.test(val)) data = val + '-01';
+      if (p === 'ano' && /^\d{4}$/.test(val)) data = val + '-01-01';
+      if (!data) { campoData.focus(); return toast(p === 'ano' ? 'Digite o ano, tipo 2024' : 'Escolha a data'); }
+      visitas.push({ data, precisao: p }); campoData.value = ''; desenhaVisitas();
+    };
+    async function gravaVisitas(lugarId) {
+      if (removidas.length) { const { error } = await supa.from('viagem_visitas').delete().in('id', removidas); if (error) throw error; S.visitas = S.visitas.filter(v => !removidas.includes(v.id)); }
+      const novas = visitas.filter(v => !v.id).map(v => ({ lugar_id: lugarId, data: v.data, precisao: v.precisao }));
+      if (novas.length) { const { data, error } = await supa.from('viagem_visitas').insert(novas).select('id,lugar_id,data,precisao,nota'); if (error) throw error; S.visitas.push(...data); }
+    }
     const aviso = m.querySelector('#f-aviso'), campoNome = m.querySelector('#f-nome'), campoTipo = m.querySelector('#f-tipo');
     m.querySelectorAll('#f-chips .chip').forEach(b => b.onclick = () => { const r = b.dataset.r; sel.has(r) ? sel.delete(r) : sel.add(r); b.setAttribute('aria-pressed', sel.has(r)); });
     m.querySelectorAll('.chip.sug').forEach(b => b.onclick = () => { campoNome.value = b.dataset.s; aviso.hidden = true; });
@@ -851,8 +914,12 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
         const ja = cidadeJaCadastrada(conf.mun);
         if (ja && ja.id !== l.id) { ev.target.disabled = false; toast(`${ja.nome} já está na sua lista`); fechar(); return abreLugar(ja.id); }
       }
-      const ok = await aoSalvar({ nome, tipo: campoTipo.value, notas: m.querySelector('#f-notas').value.trim() || null, pais: loc.pais, estado: loc.estado, ref_externa: conf.ref ?? null }, sel);
-      if (ok) fechar(); else ev.target.disabled = false;
+      // data digitada mas sem tocar em Adicionar: entra também
+      if (campoData.value.trim()) m.querySelector('#f-add-vis').click();
+      const idSalvo = await aoSalvar({ nome, tipo: campoTipo.value, notas: m.querySelector('#f-notas').value.trim() || null, pais: loc.pais, estado: loc.estado, ref_externa: conf.ref ?? null }, sel);
+      if (!idSalvo) { ev.target.disabled = false; return; }
+      try { await gravaVisitas(idSalvo); } catch (e) { toast('Lugar salvo, mas as datas falharam: ' + e.message, 4000); }
+      atualizaTudo(); fechar();
     };
     if (!l.nome) setTimeout(() => campoNome.focus(), 50);
   });
@@ -877,7 +944,7 @@ function novoLugar(dados, sugestoes) {
       try { await salvaRotulosDoLugar(data.id, sel); } catch (e) { toast('Lugar salvo, mas os rótulos falharam: ' + e.message); }
       S.aba = v.tipo === 'aeroporto' || v.tipo === 'porto' ? 'transporte' : v.tipo;
       atualizaTudo(); toast(`${v.nome} adicionado`);
-      return true;
+      return data.id;
     },
   });
 }
@@ -915,7 +982,7 @@ function abreLugar(id) {
       if (error) { toast('Erro ao salvar: ' + error.message); return false; }
       Object.assign(l, mud);
       try { await salvaRotulosDoLugar(id, sel); } catch (e) { toast('Erro nos rótulos: ' + e.message); }
-      atualizaTudo(); toast('Salvo'); return true;
+      atualizaTudo(); toast('Salvo'); return id;
     },
     aoExcluir: async () => {
       const { error } = await supa.from('viagem_lugares').delete().eq('id', id);
@@ -1182,17 +1249,48 @@ function abreImportacao() {
   });
 }
 
+/* ================= Linha do tempo ================= */
+function abreLinhaDoTempo() {
+  const porLugar = new Map(S.lugares.map(l => [l.id, l]));
+  const vs = (S.visitas || []).filter(v => porLugar.has(v.lugar_id)).sort((a, b) => b.data.localeCompare(a.data));
+  const semData = S.lugares.filter(l => S.lr.has(l.id) && !vs.some(v => v.lugar_id === l.id)).length;
+  let html = '', anoAtual = null;
+  for (const v of vs) {
+    const ano = v.data.slice(0, 4);
+    if (ano !== anoAtual) {
+      const doAno = vs.filter(x => x.data.startsWith(ano));
+      const nLug = new Set(doAno.map(x => x.lugar_id)).size, nPais = new Set(doAno.map(x => porLugar.get(x.lugar_id).pais).filter(Boolean)).size;
+      html += `<div class="ano"><b>${ano}</b><span>${nLug} ${nLug === 1 ? 'lugar' : 'lugares'} · ${nPais} ${nPais === 1 ? 'país' : 'países'}</span></div>`;
+      anoAtual = ano;
+    }
+    const l = porLugar.get(v.lugar_id);
+    const quando = v.precisao === 'ano' ? 'Durante o ano' : v.precisao === 'mes' ? MESES_LONGOS[+v.data.slice(5, 7) - 1] : fmtVisita(v);
+    html += `<button class="evento" data-ir="${l.id}"><span class="tipo">${iconeDe(l)}</span><span class="txt"><b>${esc(l.nome)}</b><small>${esc(quando)} · ${esc([nomeEstado(l.estado), nomePais(l.pais)].filter(Boolean).join(', '))}</small></span></button>`;
+  }
+  abreModal(`
+    <h3>Linha do tempo</h3>
+    ${vs.length ? '' : '<p>Ainda não tem nenhuma data. Abra um lugar e use “Quando esteve” para registrar suas visitas.</p>'}
+    <div class="linha-tempo">${html}</div>
+    ${semData ? `<p class="meta">${semData} ${semData === 1 ? 'lugar marcado ainda não tem' : 'lugares marcados ainda não têm'} data.</p>` : ''}
+    <div class="acoes"><button class="btn" id="lt-fechar">Fechar</button></div>`, (m, fechar) => {
+    m.querySelector('#lt-fechar').onclick = fechar;
+    m.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { fechar(); const l = porLugar.get(b.dataset.ir); S.aba = l.tipo === 'aeroporto' || l.tipo === 'porto' ? 'transporte' : l.tipo; atualizaTudo(); abreLugar(l.id); });
+  });
+}
+
 /* ================= Menu ================= */
 function abreMenu() {
   abreModal(`
     <h3>Menu</h3>
     <div class="menu-lista">
+      <button id="m-tempo">Linha do tempo<small>Suas visitas por ano e mês</small></button>
       <button id="m-rot">Rótulos<small>Criar, renomear, mudar cor</small></button>
       <button id="m-imp">Importar do Places Been<small>Arquivo CSV exportado do app</small></button>
       <button id="m-tudo">Ver todos os meus lugares no mapa</button>
       <button id="m-sair">Sair<small>${esc(S.user?.email || '')}</small></button>
     </div>`, (m, fechar) => {
     m.querySelector('#m-rot').onclick = () => { fechar(); abreRotulos(); };
+    m.querySelector('#m-tempo').onclick = () => { fechar(); abreLinhaDoTempo(); };
     m.querySelector('#m-imp').onclick = () => { fechar(); abreImportacao(); };
     m.querySelector('#m-tudo').onclick = () => { fechar(); const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); };
     m.querySelector('#m-sair').onclick = async () => { await supa.auth.signOut(); location.reload(); };
