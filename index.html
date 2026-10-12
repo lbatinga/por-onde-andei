@@ -221,6 +221,33 @@ button { cursor: pointer; }
 .conts svg { width: 13px; height: 13px; }
 .toast.com-acao { display: flex; gap: 14px; align-items: center; border-radius: 12px; }
 .toast button { border: 0; background: none; color: var(--accent); font-weight: 800; padding: 0; }
+.pop-resumo .leaflet-popup-content-wrapper { border-radius: 12px; background: var(--surface); color: var(--ink); }
+.pop-resumo .leaflet-popup-tip { background: var(--surface); }
+.pop-resumo .leaflet-popup-content { margin: 12px 14px; min-width: 180px; }
+.resumo { display: grid; gap: 6px; font-family: var(--f-body); }
+.resumo b { font: 700 1rem var(--f-display); }
+.resumo small { color: var(--muted); font-size: .8rem; }
+.resumo .nota { white-space: pre-line; }
+.resumo .selos { display: flex; gap: 4px; flex-wrap: wrap; }
+.resumo .btn { padding: 6px 12px; justify-self: start; }
+.viagem-card { display: grid; gap: 2px; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+.viagem-card small, .sugestao small { color: var(--muted); }
+.sugestao { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.sugestao span { min-width: 0; display: grid; }
+.vg-lista { display: grid; gap: 2px; max-height: 45vh; overflow: auto; }
+.vg-item { display: flex; gap: 10px; align-items: center; padding: 6px 2px; border-bottom: 1px solid var(--line); }
+.vg-item .tipo { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); flex: none; }
+.vg-item .tipo svg { width: 13px; height: 13px; }
+.vg-item small { display: block; color: var(--muted); }
+.link-btn { border: 0; background: none; color: var(--accent); font-weight: 700; padding: 4px 0; justify-self: start; }
+.viagem-tl { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 6px 0; background: var(--surface-2); display: grid; gap: 8px; }
+.viagem-topo { border: 0; background: none; text-align: left; padding: 0; display: grid; }
+.viagem-topo b { font: 700 1.05rem var(--f-display); }
+.viagem-topo small { color: var(--muted); }
+.viagem-lugares { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-lugar { display: inline-flex; gap: 4px; align-items: center; border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 3px 9px; font-size: .8rem; }
+.chip-lugar svg { width: 11px; height: 11px; }
+.card-prev { width: 100%; border-radius: 12px; }
 .acoes { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 10px 16px; font-weight: 600; }
 .btn.principal { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
@@ -460,7 +487,8 @@ async function carregaDados() {
   S.rotulos = rot;
   S.lugares = await todos(() => supa.from('viagem_lugares').select('*').order('nome'));
   const lr = await todos(() => supa.from('viagem_lugar_rotulos').select('lugar_id,rotulo_id,data'));
-  S.visitas = await todos(() => supa.from('viagem_visitas').select('id,lugar_id,data,precisao,nota').order('data', { ascending: false })).catch(() => []);
+  S.visitas = await todos(() => supa.from('viagem_visitas').select('id,lugar_id,data,precisao,nota,viagem_id').order('data', { ascending: false })).catch(() => []);
+  S.viagens = await todos(() => supa.from('viagem_viagens').select('*')).catch(() => []);
   S.lr = new Map();
   for (const x of lr) { if (!S.lr.has(x.lugar_id)) S.lr.set(x.lugar_id, new Map()); S.lr.get(x.lugar_id).set(x.rotulo_id, x.data); }
 }
@@ -713,7 +741,7 @@ function desenhaPinos() {
           : `<div style="--c:${corDoLugar(l.id)}">${iconeDe(l)}</div>`, iconSize: [0, 0] }),
       title: l.nome,
     });
-    m.on('click', () => abreLugar(l.id));
+    m.on('click', () => resumoLugar(l, m));
     novos.push(m);
   }
   if (camadaPinos.addLayers) camadaPinos.addLayers(novos); else novos.forEach(m => camadaPinos.addLayer(m));
@@ -1334,31 +1362,144 @@ function abreImportacao() {
   });
 }
 
+/* ================= Resumo do lugar (toque no pino) ================= */
+function resumoLugar(l, marcador) {
+  const rots = S.rotulos.filter(r => rotulosDe(l.id).has(r.id));
+  const vis = visitasDe(l.id);
+  const html = `<div class="resumo">
+    <b>${esc(l.nome)}</b>
+    <small>${esc([ehParque(l) ? 'Parque nacional' : TIPOS[l.tipo].um, nomeEstado(l.estado), nomePais(l.pais)].filter(Boolean).join(' · '))}</small>
+    <div class="selos">${rots.map(r => `<span class="selo" style="--c:${esc(r.cor)}">${esc(r.nome)}</span>`).join('')}</div>
+    ${vis.length ? `<small>Visitas: ${esc(vis.slice(0, 4).map(fmtVisita).join(', '))}${vis.length > 4 ? '…' : ''}</small>` : ''}
+    ${l.notas && !S.publico ? `<small class="nota">${esc(l.notas)}</small>` : ''}
+    ${S.publico ? '' : `<button class="btn principal" data-editar="${l.id}">Editar</button>`}
+  </div>`;
+  const pop = L.popup({ closeButton: true, autoPanPadding: [20, 60], className: 'pop-resumo' }).setLatLng(marcador.getLatLng()).setContent(html).openOn(mapa);
+  setTimeout(() => { const b = pop.getElement()?.querySelector('[data-editar]'); if (b) b.onclick = () => { mapa.closePopup(); abreLugar(l.id); }; }, 0);
+}
+
+/* ================= Viagens ================= */
+// Uma viagem junta visitas já registradas (viagem_visitas.viagem_id)
+const nomeMes = ym => `${MESES[+ym.slice(5, 7) - 1]}/${ym.slice(0, 4)}`;
+function periodoViagem(vs) {
+  const ds = vs.map(v => v.data).sort(); if (!ds.length) return '';
+  const a = ds[0].slice(0, 7), b = ds[ds.length - 1].slice(0, 7);
+  return a === b ? nomeMes(a) : `${nomeMes(a)} a ${nomeMes(b)}`;
+}
+function sugestoesViagem() {
+  const porMes = new Map();
+  for (const v of S.visitas || []) { if (v.viagem_id || v.precisao === 'ano') continue; const k = v.data.slice(0, 7); if (!porMes.has(k)) porMes.set(k, []); porMes.get(k).push(v); }
+  return [...porMes].filter(([, vs]) => vs.length >= 2).sort((a, b) => b[0].localeCompare(a[0]));
+}
+function abreViagens() {
+  const porLugar = new Map(S.lugares.map(l => [l.id, l]));
+  const desenhar = m => {
+    const sug = sugestoesViagem();
+    const ultima = vs => vs.map(v => v.data).sort().pop() || '';
+    const vgs = (S.viagens || []).map(vg => ({ vg, vs: (S.visitas || []).filter(v => v.viagem_id === vg.id) })).sort((a, b) => ultima(b.vs).localeCompare(ultima(a.vs)));
+    m.querySelector('#vg-corpo').innerHTML = `
+      ${vgs.length ? vgs.map(({ vg, vs }) => { const ps = new Set(vs.map(v => porLugar.get(v.lugar_id)?.pais).filter(Boolean)); return `<button class="viagem-card" data-vg="${vg.id}"><b>${esc(vg.nome)}</b><small>${esc(periodoViagem(vs))} · ${vs.length} ${vs.length === 1 ? 'lugar' : 'lugares'} · ${[...ps].map(bandeira).join(' ')}</small></button>`; }).join('') : '<p>Nenhuma viagem ainda. Crie uma a partir das sugestões abaixo ou do zero.</p>'}
+      ${sug.length ? `<h4>Sugestões</h4><p class="meta">Meses com vários lugares visitados que ainda não estão numa viagem.</p>${sug.map(([ym, vs]) => `<div class="sugestao"><span><b>${esc(nomeMes(ym))}</b> · ${vs.length} lugares<small>${esc(vs.slice(0, 5).map(v => porLugar.get(v.lugar_id)?.nome).filter(Boolean).join(', '))}${vs.length > 5 ? '…' : ''}</small></span><button class="btn" data-sug="${ym}">Criar</button></div>`).join('')}` : ''}`;
+    m.querySelectorAll('[data-vg]').forEach(b => b.onclick = () => editaViagem(S.viagens.find(x => x.id === b.dataset.vg), null, () => desenhar(m)));
+    m.querySelectorAll('[data-sug]').forEach(b => b.onclick = () => editaViagem(null, b.dataset.sug, () => desenhar(m)));
+  };
+  abreModal(`<h3>Viagens</h3><div id="vg-corpo"></div>
+    <div class="acoes"><button class="btn" id="vg-fechar">Fechar</button><button class="btn principal" id="vg-nova">Nova viagem</button></div>`, (m, fechar) => {
+    m.querySelector('#vg-fechar').onclick = fechar;
+    m.querySelector('#vg-nova').onclick = () => editaViagem(null, null, () => desenhar(m));
+    desenhar(m);
+  });
+}
+function editaViagem(vg, mesSugerido, aoSalvar) {
+  const porLugar = new Map(S.lugares.map(l => [l.id, l]));
+  const marcadas = new Set((S.visitas || []).filter(v => vg ? v.viagem_id === vg.id : mesSugerido && !v.viagem_id && v.precisao !== 'ano' && v.data.startsWith(mesSugerido)).map(v => v.id));
+  // candidatas: visitas sem viagem (ou desta), a até ~2,5 meses das datas da viagem
+  const ref = vg ? (S.visitas || []).filter(v => v.viagem_id === vg.id).map(v => v.data) : mesSugerido ? [mesSugerido + '-01'] : [];
+  const perto = d => !ref.length || ref.some(r => Math.abs(new Date(d) - new Date(r)) < 75 * 864e5);
+  let todas = false;
+  const nomePadrao = vg ? vg.nome : mesSugerido ? `Viagem de ${MESES_LONGOS[+mesSugerido.slice(5, 7) - 1]} de ${mesSugerido.slice(0, 4)}` : '';
+  abreModal(`
+    <h3>${vg ? 'Editar viagem' : 'Nova viagem'}</h3>
+    <div class="campo"><label for="vg-nome">Nome</label><input id="vg-nome" value="${esc(nomePadrao)}" placeholder="Ex.: Sul e Argentina"></div>
+    <div class="campo"><span class="rotulo-campo">Lugares desta viagem</span><div id="vg-lista" class="vg-lista"></div>
+      <button type="button" class="link-btn" id="vg-todas">Mostrar todas as visitas</button></div>
+    <p class="meta">A viagem junta visitas que você já registrou. Para aparecer aqui, o lugar precisa ter a data em “Quando esteve”.</p>
+    <div class="acoes">${vg ? '<button class="btn perigo" id="vg-excluir">Excluir viagem</button>' : ''}<button class="btn" id="vg-cancelar">Cancelar</button><button class="btn principal" id="vg-salvar">Salvar</button></div>`, (m, fechar) => {
+    const desenharLista = () => {
+      const cand = (S.visitas || []).filter(v => porLugar.has(v.lugar_id) && (marcadas.has(v.id) || ((!v.viagem_id || v.viagem_id === vg?.id) && (todas || perto(v.data))))).sort((a, b) => b.data.localeCompare(a.data));
+      m.querySelector('#vg-lista').innerHTML = cand.length ? cand.map(v => { const l = porLugar.get(v.lugar_id); return `<label class="vg-item"><input type="checkbox" data-v="${v.id}" ${marcadas.has(v.id) ? 'checked' : ''}><span class="tipo">${iconeDe(l)}</span><span><b>${esc(l.nome)}</b><small>${esc(fmtVisita(v))} · ${esc(nomeEstado(l.estado) || nomePais(l.pais))}</small></span></label>`; }).join('') : '<p class="meta">Nenhuma visita perto dessas datas.</p>';
+      m.querySelectorAll('[data-v]').forEach(c => c.onchange = () => { c.checked ? marcadas.add(c.dataset.v) : marcadas.delete(c.dataset.v); });
+    };
+    desenharLista();
+    m.querySelector('#vg-todas').onclick = e => { todas = true; e.target.hidden = true; desenharLista(); };
+    m.querySelector('#vg-cancelar').onclick = fechar;
+    if (vg) botaoDuploToque(m.querySelector('#vg-excluir'), async () => {
+      const { error } = await supa.from('viagem_viagens').delete().eq('id', vg.id); if (error) return toast('Erro: ' + error.message);
+      S.viagens = S.viagens.filter(x => x.id !== vg.id); S.visitas.forEach(v => { if (v.viagem_id === vg.id) v.viagem_id = null; });
+      fechar(); aoSalvar && aoSalvar(); toast('Viagem excluída');
+    });
+    m.querySelector('#vg-salvar').onclick = async ev => {
+      const nome = m.querySelector('#vg-nome').value.trim(); if (!nome) return m.querySelector('#vg-nome').focus();
+      if (!marcadas.size) return toast('Marque pelo menos um lugar');
+      ev.target.disabled = true;
+      try {
+        let id = vg?.id;
+        if (vg) { const { error } = await supa.from('viagem_viagens').update({ nome }).eq('id', id); if (error) throw error; vg.nome = nome; }
+        else { const { data, error } = await supa.from('viagem_viagens').insert({ nome }).select().single(); if (error) throw error; id = data.id; S.viagens.push(data); }
+        const tirar = (S.visitas || []).filter(v => v.viagem_id === id && !marcadas.has(v.id)).map(v => v.id);
+        if (tirar.length) { const { error } = await supa.from('viagem_visitas').update({ viagem_id: null }).in('id', tirar); if (error) throw error; }
+        const por = [...marcadas];
+        if (por.length) { const { error } = await supa.from('viagem_visitas').update({ viagem_id: id }).in('id', por); if (error) throw error; }
+        S.visitas.forEach(v => { if (tirar.includes(v.id)) v.viagem_id = null; if (marcadas.has(v.id)) v.viagem_id = id; });
+        fechar(); aoSalvar && aoSalvar(); toast('Viagem salva');
+      } catch (e) { toast('Erro: ' + e.message); ev.target.disabled = false; }
+    };
+  });
+}
+
 /* ================= Linha do tempo ================= */
 function abreLinhaDoTempo() {
   const porLugar = new Map(S.lugares.map(l => [l.id, l]));
   const vs = (S.visitas || []).filter(v => porLugar.has(v.lugar_id)).sort((a, b) => b.data.localeCompare(a.data));
   const semData = S.lugares.filter(l => S.lr.has(l.id) && !vs.some(v => v.lugar_id === l.id)).length;
-  let html = '', anoAtual = null;
+  // cada viagem vira um cartão; visitas soltas aparecem uma a uma
+  const itens = [], vistas = new Set();
   for (const v of vs) {
-    const ano = v.data.slice(0, 4);
+    if (v.viagem_id && S.viagens?.some(x => x.id === v.viagem_id)) {
+      if (vistas.has(v.viagem_id)) continue; vistas.add(v.viagem_id);
+      const dela = vs.filter(x => x.viagem_id === v.viagem_id);
+      itens.push({ tipo: 'viagem', data: dela.map(x => x.data).sort()[0], vg: S.viagens.find(x => x.id === v.viagem_id), vs: dela });
+    } else itens.push({ tipo: 'visita', data: v.data, v });
+  }
+  itens.sort((a, b) => b.data.localeCompare(a.data));
+  let html = '', anoAtual = null;
+  for (const it of itens) {
+    const ano = it.data.slice(0, 4);
     if (ano !== anoAtual) {
       const doAno = vs.filter(x => x.data.startsWith(ano));
       const nLug = new Set(doAno.map(x => x.lugar_id)).size, nPais = new Set(doAno.map(x => porLugar.get(x.lugar_id).pais).filter(Boolean)).size;
       html += `<div class="ano"><b>${ano}</b><span>${nLug} ${nLug === 1 ? 'lugar' : 'lugares'} · ${nPais} ${nPais === 1 ? 'país' : 'países'}</span></div>`;
       anoAtual = ano;
     }
-    const l = porLugar.get(v.lugar_id);
-    const quando = v.precisao === 'ano' ? 'Durante o ano' : v.precisao === 'mes' ? MESES_LONGOS[+v.data.slice(5, 7) - 1] : fmtVisita(v);
-    html += `<button class="evento" data-ir="${l.id}"><span class="tipo">${iconeDe(l)}</span><span class="txt"><b>${esc(l.nome)}</b><small>${esc(quando)} · ${esc([nomeEstado(l.estado), nomePais(l.pais)].filter(Boolean).join(', '))}</small></span></button>`;
+    if (it.tipo === 'viagem') {
+      const ps = new Set(it.vs.map(x => porLugar.get(x.lugar_id).pais).filter(Boolean));
+      html += `<div class="viagem-tl"><button class="viagem-topo" data-vg="${it.vg.id}"><b>${esc(it.vg.nome)}</b><small>${esc(periodoViagem(it.vs))} · ${it.vs.length} lugares ${[...ps].map(bandeira).join(' ')}</small></button>
+        <div class="viagem-lugares">${it.vs.map(x => { const l = porLugar.get(x.lugar_id); return `<button class="chip-lugar" data-ir="${l.id}">${iconeDe(l)}${esc(l.nome)}</button>`; }).join('')}</div></div>`;
+    } else {
+      const v = it.v, l = porLugar.get(v.lugar_id);
+      const quando = v.precisao === 'ano' ? 'Durante o ano' : v.precisao === 'mes' ? MESES_LONGOS[+v.data.slice(5, 7) - 1] : fmtVisita(v);
+      html += `<button class="evento" data-ir="${l.id}"><span class="tipo">${iconeDe(l)}</span><span class="txt"><b>${esc(l.nome)}</b><small>${esc(quando)} · ${esc([nomeEstado(l.estado), nomePais(l.pais)].filter(Boolean).join(', '))}</small></span></button>`;
+    }
   }
   abreModal(`
     <h3>Linha do tempo</h3>
     ${vs.length ? '' : '<p>Ainda não tem nenhuma data. Abra um lugar e use “Quando esteve” para registrar suas visitas.</p>'}
     <div class="linha-tempo">${html}</div>
     ${semData ? `<p class="meta">${semData} ${semData === 1 ? 'lugar marcado ainda não tem' : 'lugares marcados ainda não têm'} data.</p>` : ''}
-    <div class="acoes"><button class="btn" id="lt-fechar">Fechar</button></div>`, (m, fechar) => {
+    <div class="acoes"><button class="btn" id="lt-viagens">Organizar viagens</button><button class="btn" id="lt-fechar">Fechar</button></div>`, (m, fechar) => {
     m.querySelector('#lt-fechar').onclick = fechar;
+    m.querySelector('#lt-viagens').onclick = () => { fechar(); abreViagens(); };
+    m.querySelectorAll('[data-vg]').forEach(b => b.onclick = () => { fechar(); editaViagem(S.viagens.find(x => x.id === b.dataset.vg), null, abreLinhaDoTempo); });
     m.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { fechar(); const l = porLugar.get(b.dataset.ir); S.aba = l.tipo === 'aeroporto' || l.tipo === 'porto' ? 'transporte' : l.tipo; atualizaTudo(); abreLugar(l.id); });
   });
 }
@@ -1512,11 +1653,13 @@ function abreMenuPublico() {
     <div class="menu-lista">
       <button id="m-est">Estatísticas<small>Países, continentes e área do mundo</small></button>
       <button id="m-band">Bandeiras<small>Países visitados</small></button>
+      <button id="m-card">Imagem do mapa<small>Para salvar ou enviar</small></button>
       <button id="m-tudo">Ver tudo no mapa</button>
       <a class="menu-link" href="/">Criar o meu mapa</a>
     </div>`, (m, fechar) => {
     m.querySelector('#m-est').onclick = () => { fechar(); abreEstatisticas(); };
     m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); };
+    m.querySelector('#m-card').onclick = () => { fechar(); abreCard(); };
     m.querySelector('#m-tudo').onclick = () => { fechar(); const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); };
   });
 }
@@ -1558,6 +1701,52 @@ function abreBackup() {
   });
 }
 
+/* ================= Imagem para compartilhar ================= */
+async function geraCard() {
+  calcula();
+  const W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  try { await document.fonts?.ready; } catch {}
+  const fd = getComputedStyle(document.documentElement).getPropertyValue('--f-display').trim() || 'sans-serif';
+  const fb = getComputedStyle(document.documentElement).getPropertyValue('--f-body').trim() || 'sans-serif';
+  const caixa = (x, y, w, h, r) => { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); };
+  c.fillStyle = '#123a3f'; c.fillRect(0, 0, W, H);
+  // mapa-múndi em projeção simples; países visitados e estados visitados em destaque
+  const mx = 40, my = 220, mw = W - 80, mh = mw * 0.5;
+  const px = lon => mx + (lon + 180) / 360 * mw, py = lat => my + (90 - lat) / 180 * mh;
+  c.save(); caixa(mx, my, mw, mh, 28); c.clip();
+  c.fillStyle = '#0e2c30'; c.fillRect(mx, my, mw, mh);
+  const desenha = (f, cor) => { c.fillStyle = cor; c.beginPath(); for (const p of f.polys) for (const anel of p) { anel.forEach(([x, y], i) => i ? c.lineTo(px(x), py(y)) : c.moveTo(px(x), py(y))); c.closePath(); } c.fill('evenodd'); };
+  S.paises.forEach(p => desenha(p, paisesVis.has(p.id) ? '#2fb3a3' : '#2a4a4e'));
+  S.estados.filter(e => estadosVis.has(e.id)).forEach(e => desenha(e, '#7fe3d5'));
+  c.restore();
+  c.fillStyle = '#f2e8d5'; c.font = `800 72px ${fd}`; c.fillText(S.publico && S.nomePublico ? `Viagens de ${S.nomePublico}` : 'Por onde andei', 60, 130);
+  c.fillStyle = '#e4572e'; c.font = `600 34px ${fb}`; c.fillText(`${paisesVis.size} ${paisesVis.size === 1 ? 'país' : 'países'} · ${estadosVis.size} estados`, 60, 185);
+  const vis = idsVisita(), cont = { cidade: 0, unesco: 0, aeroporto: 0, atracao: 0 };
+  S.lugares.forEach(l => { if (visitado(l.id, vis) && l.tipo in cont) cont[l.tipo]++; });
+  const itens = [[cont.cidade, 'cidades'], [cont.unesco, 'patrimônios UNESCO'], [cont.aeroporto, 'aeroportos'], [cont.atracao, 'atrações e parques']];
+  const by = my + mh + 60, bw = (W - 120 - 30) / 2, bh = 190;
+  itens.forEach(([n, t], i) => {
+    const x = 60 + (i % 2) * (bw + 30), y = by + Math.floor(i / 2) * (bh + 30);
+    c.fillStyle = '#0e2c30'; caixa(x, y, bw, bh, 24); c.fill();
+    c.fillStyle = '#f2e8d5'; c.font = `800 92px ${fd}`; c.fillText(String(n), x + 34, y + 110);
+    c.fillStyle = '#9fc3c0'; c.font = `500 32px ${fb}`; c.fillText(t, x + 34, y + 158);
+  });
+  c.fillStyle = '#9fc3c0'; c.font = `500 28px ${fb}`; c.fillText('Feito com o Por Onde Andei', 60, H - 50);
+  return new Promise(r => cv.toBlob(r, 'image/png'));
+}
+async function abreCard() {
+  const blob = await geraCard(), url = URL.createObjectURL(blob);
+  const arq = new File([blob], 'por-onde-andei.png', { type: 'image/png' });
+  let podeEnviar = false; try { podeEnviar = !!navigator.canShare?.({ files: [arq] }); } catch {}
+  abreModal(`<h3>Imagem para compartilhar</h3><img class="card-prev" src="${url}" alt="Resumo das suas viagens">
+    <div class="acoes">${podeEnviar ? '<button class="btn principal" id="cd-enviar">Enviar…</button>' : ''}<button class="btn" id="cd-baixar">Baixar</button><button class="btn" id="cd-fechar">Fechar</button></div>`, (m, fechar) => {
+    m.querySelector('#cd-fechar').onclick = () => { URL.revokeObjectURL(url); fechar(); };
+    m.querySelector('#cd-baixar').onclick = () => baixarArquivo('por-onde-andei.png', blob, 'image/png');
+    const e = m.querySelector('#cd-enviar'); if (e) e.onclick = () => navigator.share({ files: [arq], title: 'Por onde andei' }).catch(() => {});
+  });
+}
+
 /* ================= Menu ================= */
 function abreMenu() {
   abreModal(`
@@ -1566,6 +1755,8 @@ function abreMenu() {
       <button id="m-est">Estatísticas<small>Países, continentes e área do mundo</small></button>
       <button id="m-band">Bandeiras<small>Sua coleção de países</small></button>
       <button id="m-tempo">Linha do tempo<small>Suas visitas por ano e mês</small></button>
+      <button id="m-viagens">Viagens<small>Junte os lugares de cada viagem</small></button>
+      <button id="m-card">Imagem para compartilhar<small>Mapa e números prontos para WhatsApp e Instagram</small></button>
       <button id="m-comp">Compartilhar meu mapa<small>Link só de leitura para amigos e família</small></button>
       <button id="m-backup">Baixar meus dados<small>Cópia em planilha ou arquivo completo</small></button>
       <button id="m-rot">Rótulos<small>Criar, renomear, mudar cor</small></button>
@@ -1575,6 +1766,8 @@ function abreMenu() {
     </div>`, (m, fechar) => {
     m.querySelector('#m-rot').onclick = () => { fechar(); abreRotulos(); };
     m.querySelector('#m-tempo').onclick = () => { fechar(); abreLinhaDoTempo(); };
+    m.querySelector('#m-viagens').onclick = () => { fechar(); abreViagens(); };
+    m.querySelector('#m-card').onclick = () => { fechar(); abreCard(); };
     m.querySelector('#m-est').onclick = () => { fechar(); abreEstatisticas(); };
     m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); };
     m.querySelector('#m-comp').onclick = () => { fechar(); abreCompartilhar(); };
