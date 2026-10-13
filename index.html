@@ -713,6 +713,16 @@ function corDoLugar(lugarId) {
   for (const r of S.rotulos) if (m.has(r.id)) return r.cor;
   return '#8a9a9b';
 }
+// tirou a última marcação: lugar sem rótulo não serve pra nada, então pergunta se exclui
+function perguntaExcluirSemRotulo(lugarId, rotuloId, nome) {
+  abreModal(`<h3>Excluir ${esc(nome)}?</h3>
+    <p class="meta">Ele ficou sem nenhuma marcação. Se não vai usar, dá pra excluir da sua lista.</p>
+    <div class="acoes"><button class="btn" id="sr-volta">Remarcar</button><button class="btn" id="sr-manter">Manter sem marcação</button><button class="btn perigo" id="sr-excluir">Excluir</button></div>`, (mm, fechar) => {
+    mm.querySelector('#sr-volta').onclick = () => { fechar(); alternaRotulo(lugarId, rotuloId); };
+    mm.querySelector('#sr-manter').onclick = fechar;
+    mm.querySelector('#sr-excluir').onclick = () => { fechar(); excluiLugar(lugarId); };
+  });
+}
 async function alternaRotulo(lugarId, rotuloId) {
   const m = rotulosDe(lugarId); const tinha = m.has(rotuloId);
   if (tinha) {
@@ -720,6 +730,7 @@ async function alternaRotulo(lugarId, rotuloId) {
     if (error) return toast('Não deu pra salvar: ' + error.message);
     m.delete(rotuloId); if (!m.size) S.lr.delete(lugarId);
     const nomeL = S.lugares.find(x => x.id === lugarId)?.nome || 'lugar', nomeR = S.rotulos.find(r => r.id === rotuloId)?.nome || 'rótulo';
+    if (!m.size) { atualizaTudo(); return perguntaExcluirSemRotulo(lugarId, rotuloId, nomeL); }
     toast(`${nomeR} tirado de ${nomeL}`, 5000, { rotulo: 'Desfazer', fn: () => alternaRotulo(lugarId, rotuloId) });
   } else {
     const { error } = await grava({ tipo: 'inserir', tabela: 'viagem_lugar_rotulos', linha: { lugar_id: lugarId, rotulo_id: rotuloId } });
@@ -997,6 +1008,7 @@ async function colocaFundo() {
     if (!L.maplibreGL || !window.maplibregl) throw 0;
     const st = await estiloEmPortugues(); if (!st) throw 0;
     fundo = L.maplibreGL({ style: st, attribution: atrib }).addTo(mapa);
+    fundo.vetorial = true;
   } catch {
     // sem WebGL ou sem conexão com o OpenFreeMap: mapa simples do OpenStreetMap
     fundo = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · Natural Earth' }).addTo(mapa);
@@ -1057,7 +1069,7 @@ function iniciaMapa() {
   };
   mapa.on('zoomend', () => { ajustaZoom(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); }); ajustaZoom();
 
-  mapa.on('click', e => { if (S.modoMira) { saiMira(); novoLugarEm(e.latlng.lat, e.latlng.lng); } });
+  mapa.on('click', e => { if (S.modoMira) { saiMira(); novoLugarEm(e.latlng.lat, e.latlng.lng); return; } tocaIconeDoMapa(e); });
   mapa.on('contextmenu', e => novoLugarEm(e.latlng.lat, e.latlng.lng));
 }
 function ajustaCamadaEstados() {
@@ -1430,6 +1442,37 @@ function novoLugar(dados, sugestoes) {
     },
   });
 }
+// Tocar num ícone do mapa (museu, praça, igreja, estádio, aeroporto...) abre o cadastro com o nome certo.
+// Restaurante, loja, farmácia etc. não entram: não são tipos do app.
+const POI_OK = new Set(['museum', 'art_gallery', 'attraction', 'monument', 'memorial', 'castle', 'ruins', 'archaeological_site', 'historic',
+  'place_of_worship', 'church', 'cathedral', 'park', 'garden', 'zoo', 'aquarium', 'theme_park', 'stadium', 'theatre', 'viewpoint',
+  'beach', 'harbor', 'ferry_terminal', 'aerodrome', 'airport', 'town_hall', 'fort', 'lighthouse', 'waterfall', 'peak', 'national_park', 'nature_reserve']);
+function poiNoPonto(e) {
+  if (!fundo?.vetorial || !fundo.getMaplibreMap) return null;
+  const ml = fundo.getMaplibreMap(); if (!ml?.queryRenderedFeatures) return null;
+  const pt = ml.project([e.latlng.lng, e.latlng.lat]), r = 14;
+  const fs = ml.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    .filter(f => f.layer?.type === 'symbol' && f.properties?.name && f.geometry?.type === 'Point'
+      && (f.sourceLayer === 'aerodrome_label' || (f.sourceLayer === 'poi' && (POI_OK.has(f.properties.class) || POI_OK.has(f.properties.subclass)))));
+  if (!fs.length) return null;
+  const d = f => { const q = ml.project(f.geometry.coordinates); return (q.x - pt.x) ** 2 + (q.y - pt.y) ** 2; };
+  return fs.sort((a, b) => d(a) - d(b))[0];
+}
+async function tocaIconeDoMapa(e) {
+  if (S.publico) return;
+  const f = poiNoPonto(e); if (!f) return;
+  const p = f.properties, [lon, lat] = f.geometry.coordinates;
+  const nome = p['name:pt'] || p['name:latin'] || p.name;
+  const ja = S.lugares.find(l => norm(l.nome) === norm(nome) && distKm(l.lat, l.lon, lat, lon) < 1);
+  if (ja) return abreLugar(ja.id);
+  const tipo = f.sourceLayer === 'aerodrome_label' || p.class === 'aerodrome' ? 'aeroporto'
+    : ['museum', 'art_gallery'].includes(p.class) || p.subclass === 'museum' ? 'museu'
+    : ['harbor', 'ferry_terminal'].includes(p.class) ? 'porto' : 'atracao';
+  // aeroporto da base oficial (pelo código IATA) entra ligado ao ranking
+  if (tipo === 'aeroporto' && p.iata) { try { await carregaBase('aeroporto'); const b = acharBase('iata:' + p.iata); if (b) return abreBase(b.ref); } catch {} }
+  const dados = { lat, lon, tipo, nome, pais: localizar(lat, lon).pais };
+  confereMuseuOficial(dados).then(ok => ok && novoLugar(dados));
+}
 async function novoLugarEm(lat, lon) {
   if (S.publico) return;
   let sugestoes = [], tipo = 'cidade';
@@ -1455,6 +1498,21 @@ async function novoLugarEm(lat, lon) {
   sugestoes = [...new Set(sugestoes)].slice(0, 5);
   novoLugar({ lat, lon, tipo, nome: '' }, sugestoes.length ? sugestoes : null);
 }
+async function excluiLugar(id) {
+  const l = S.lugares.find(x => x.id === id); if (!l) return;
+    // guarda tudo antes de apagar, para o Desfazer recriar igual
+    const copia = { ...l }, rots = [...rotulosDe(id).keys()], vis = visitasDe(id).map(v => ({ ...v }));
+    const { error } = await supa.from('viagem_lugares').delete().eq('id', id);
+    if (error) return toast('Erro ao excluir: ' + error.message);
+    S.lugares = S.lugares.filter(x => x.id !== id); S.lr.delete(id); S.visitas = (S.visitas || []).filter(v => v.lugar_id !== id); atualizaTudo();
+    toast(`${l.nome} excluído`, 6000, { rotulo: 'Desfazer', fn: async () => {
+      const { user_id, criado_em, ...reg } = copia;
+      const { error: e1 } = await supa.from('viagem_lugares').insert(reg); if (e1) return toast('Não deu pra desfazer: ' + e1.message);
+      if (rots.length) await supa.from('viagem_lugar_rotulos').insert(rots.map(r => ({ lugar_id: id, rotulo_id: r })));
+      if (vis.length) await supa.from('viagem_visitas').insert(vis.map(v => ({ lugar_id: id, data: v.data, precisao: v.precisao, nota: v.nota || null })));
+      await carregaDados(); atualizaTudo(); toast(`${copia.nome} voltou`);
+    } });
+}
 function abreLugar(id) {
   const l = S.lugares.find(x => x.id === id); if (!l) return;
   mapa.setView([l.lat, l.lon], Math.max(mapa.getZoom(), 9));
@@ -1474,20 +1532,7 @@ function abreLugar(id) {
       try { await salvaRotulosDoLugar(id, sel); } catch (e) { toast('Erro nos rótulos: ' + e.message); }
       atualizaTudo(); toast('Salvo'); return id;
     },
-    aoExcluir: async () => {
-      // guarda tudo antes de apagar, para o Desfazer recriar igual
-      const copia = { ...l }, rots = [...rotulosDe(id).keys()], vis = visitasDe(id).map(v => ({ ...v }));
-      const { error } = await supa.from('viagem_lugares').delete().eq('id', id);
-      if (error) return toast('Erro ao excluir: ' + error.message);
-      S.lugares = S.lugares.filter(x => x.id !== id); S.lr.delete(id); S.visitas = (S.visitas || []).filter(v => v.lugar_id !== id); atualizaTudo();
-      toast(`${l.nome} excluído`, 6000, { rotulo: 'Desfazer', fn: async () => {
-        const { user_id, criado_em, ...reg } = copia;
-        const { error: e1 } = await supa.from('viagem_lugares').insert(reg); if (e1) return toast('Não deu pra desfazer: ' + e1.message);
-        if (rots.length) await supa.from('viagem_lugar_rotulos').insert(rots.map(r => ({ lugar_id: id, rotulo_id: r })));
-        if (vis.length) await supa.from('viagem_visitas').insert(vis.map(v => ({ lugar_id: id, data: v.data, precisao: v.precisao, nota: v.nota || null })));
-        await carregaDados(); atualizaTudo(); toast(`${copia.nome} voltou`);
-      } });
-    },
+    aoExcluir: () => excluiLugar(id),
   });
 }
 // leva o mapa até o lugar sem perder o zoom que você deixou: se o ponto já está na tela, nem mexe;
