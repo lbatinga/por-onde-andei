@@ -937,7 +937,7 @@ async function marcaBase(ref, rotuloId) {
 function abreBase(ref) {
   const b = acharBase(ref); if (!b) return;
   const ja = lugarDaRef(ref); if (ja) return abreLugar(ja.id);
-  mapa.setView([b.lat, b.lon], Math.max(mapa.getZoom(), 10));
+  vaiPara(b.lat, b.lon, 10);
   novoLugar({ lat: b.lat, lon: b.lon, tipo: b.tipo, nome: b.nome, pais: b.pais, ref_externa: ref });
 }
 // Pinos cinza dos itens da base (só na aba certa e de perto o bastante)
@@ -1490,9 +1490,15 @@ function abreLugar(id) {
     },
   });
 }
+// leva o mapa até o lugar sem perder o zoom que você deixou: se o ponto já está na tela, nem mexe;
+// se está longe, vai até ele e só aproxima se o zoom atual estiver afastado demais
+function vaiPara(lat, lon, zoomMin) {
+  if (mapa.getBounds().pad(-0.1).contains([lat, lon])) return;
+  mapa.setView([lat, lon], Math.max(mapa.getZoom(), zoomMin));
+}
 function abreMunicipio(m) {
   $('#resultados').hidden = true; $('#busca').value = '';
-  mapa.setView([m.lat, m.lon], 10);
+  vaiPara(m.lat, m.lon, 10);
   const ja = cidadeJaCadastrada(m);
   if (ja) return abreLugar(ja.id);
   novoLugar({ lat: m.lat, lon: m.lon, tipo: 'cidade', nome: m.nome, pais: 'BR', ref_externa: refIbge(m) });
@@ -1536,7 +1542,7 @@ function ligaResultados(box, mundo) {
   const bm = box.querySelector('[data-mundo]'); if (bm) bm.onclick = () => buscar($('#busca').value.trim());
   box.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
     const x = mundo[+b.dataset.i]; box.hidden = true; $('#busca').value = '';
-    const lat = +x.lat, lon = +x.lon; mapa.setView([lat, lon], 10);
+    const lat = +x.lat, lon = +x.lon; vaiPara(lat, lon, tipoDoResultado(x) === 'cidade' ? 10 : 14);
     const nome = x.name || x.display_name.split(',')[0];
     const ja = S.lugares.find(l => norm(l.nome) === norm(nome) && distKm(l.lat, l.lon, lat, lon) < 15);
     if (ja) return abreLugar(ja.id);
