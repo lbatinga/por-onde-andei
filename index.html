@@ -1070,7 +1070,8 @@ function iniciaMapa() {
   mapa.on('zoomend', () => { ajustaZoom(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); }); ajustaZoom();
 
   mapa.on('click', e => { if (S.modoMira) { saiMira(); novoLugarEm(e.latlng.lat, e.latlng.lng); return; } tocaIconeDoMapa(e); });
-  mapa.on('contextmenu', e => novoLugarEm(e.latlng.lat, e.latlng.lng));
+  // segurar o dedo: se for em cima de um ícone, usa o nome dele; senão, cadastro pelo endereço
+  mapa.on('contextmenu', e => { if (poiNoPonto(e)) return tocaIconeDoMapa(e); novoLugarEm(e.latlng.lat, e.latlng.lng); });
 }
 function ajustaCamadaEstados() {
   if (!mapa || !camadaEstados) return;
@@ -1450,7 +1451,7 @@ const POI_OK = new Set(['museum', 'art_gallery', 'attraction', 'monument', 'memo
 function poiNoPonto(e) {
   if (!fundo?.vetorial || !fundo.getMaplibreMap) return null;
   const ml = fundo.getMaplibreMap(); if (!ml?.queryRenderedFeatures) return null;
-  const pt = ml.project([e.latlng.lng, e.latlng.lat]), r = 14;
+  const pt = ml.project([e.latlng.lng, e.latlng.lat]), r = 24; // margem de um dedo
   const fs = ml.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
     .filter(f => f.layer?.type === 'symbol' && f.properties?.name && f.geometry?.type === 'Point'
       && (f.sourceLayer === 'aerodrome_label' || (f.sourceLayer === 'poi' && (POI_OK.has(f.properties.class) || POI_OK.has(f.properties.subclass)))));
