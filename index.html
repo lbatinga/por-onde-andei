@@ -255,6 +255,9 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 [data-st-sec] h4:first-child { margin-top: 12px; }
 [data-st-sec] h5 { margin: 16px 0 6px; }
 [data-st-sec] .barra { margin-bottom: 8px; }
+.st-paises { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 2px; }
+.st-paises button { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: .88rem; cursor: pointer; color: var(--ink); }
+.st-paises button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .st-abas { margin: 10px 0 4px; position: sticky; top: -1px; z-index: 2; }
 .aero-lista { display: grid; gap: 0; margin: 4px 0 6px; }
 .aero-linha { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
@@ -2354,6 +2357,9 @@ function abreEstatisticas() {
   const NOMES_T = { cidade: 'Cidades', unesco: 'Patrimônios UNESCO', aeroporto: 'Aeroportos', porto: 'Portos', atracao: 'Atrações', parque: 'Parques nacionais', museu: 'Museus' };
   const porRot = S.rotulos.map(r => [r, S.lugares.filter(l => rotulosDe(l.id).has(r.id)).length]);
   const capitais = CAPITAIS.filter(c => ibgeVis.has(c)).length;
+  // países para a aba País: o da sua casa primeiro
+  const paisCasaSt = casa()?.pais || 'BR';
+  const paisesStats = [...paisesVis].sort((a, b) => (b === paisCasaSt) - (a === paisCasaSt) || nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
   const c0 = casa();
   const longe = c0 ? visitados.filter(l => l.id !== c0.id).map(l => [l, distKm(c0.lat, c0.lon, l.lat, l.lon)]).sort((a, b) => b[1] - a[1])[0] : null;
   const opcoesCasa = (() => {
@@ -2370,7 +2376,7 @@ function abreEstatisticas() {
     </div>
     <p class="meta">A área soma cada estado ou província onde você esteve, inteiro: passar por Manaus conta o Amazonas todo. É o mesmo critério do Places Been.</p>
     <div class="abas-band st-abas" role="tablist">
-      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="brasil">Brasil</button><button role="tab" data-st="aero">Aeroportos</button>${(S.viagens || []).length >= 3 ? '<button role="tab" data-st="viagens">Viagens</button>' : ''}
+      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="pais">País</button><button role="tab" data-st="aero">Aeroportos</button>${(S.viagens || []).length >= 3 ? '<button role="tab" data-st="viagens">Viagens</button>' : ''}
     </div>
     <section data-st-sec="geral">
       <h4>Por continente</h4>
@@ -2387,14 +2393,9 @@ function abreEstatisticas() {
       <div class="tabela">${Object.keys(NOMES_T).filter(t => porTipo[t]).map(t => `<span>${NOMES_T[t]}</span><b>${num(porTipo[t])}</b>`).join('')}
         ${porRot.map(([r, n]) => `<span><i class="bolinha" style="background:${esc(r.cor)}"></i>${esc(r.nome)}</span><b>${num(n)}</b>`).join('')}</div>
     </section>
-    <section data-st-sec="brasil" hidden>
-      <h4>No país</h4>
-      ${barra('Estados', ufsBR.size, 27)}${barra('Capitais', capitais, 27)}<div id="st-mun-total"></div>
-      <h4>Por região</h4>
-      ${Object.entries(REGIOES_BR).map(([r, ufs]) => barra(r, ufs.filter(u => ufsBR.has(u)).length, ufs.length)).join('')}
-      <h4>Municípios por estado</h4><div id="st-mun-uf"><p class="meta">Carregando…</p></div>
-      <h4>Patrimônios da UNESCO</h4><div id="st-unesco"><p class="meta">Carregando…</p></div>
-      <h4>Museus</h4><div id="st-museus"><p class="meta">Carregando…</p></div>
+    <section data-st-sec="pais" hidden>
+      <div class="st-paises">${paisesStats.map(p => `<button data-st-pais="${p}">${bandeira(p)} ${esc(nomePais(p))}</button>`).join('')}</div>
+      <div id="st-pais"></div>
     </section>
     <section data-st-sec="aero" hidden><div id="st-aero"><p class="meta">Carregando…</p></div></section>
     <section data-st-sec="viagens" hidden>
@@ -2414,18 +2415,56 @@ function abreEstatisticas() {
       try { localStorage.setItem('poa-st-aba', aba); } catch {}
     };
     m.querySelectorAll('[data-st]').forEach(b => b.onclick = () => mostraAba(b.dataset.st));
-    mostraAba((() => { try { const a = localStorage.getItem('poa-st-aba') || 'geral'; return m.querySelector(`[data-st="${a}"]`) ? a : 'geral'; } catch { return 'geral'; } })());
+    mostraAba((() => { try { let a = localStorage.getItem('poa-st-aba') || 'geral'; if (a === 'brasil') a = 'pais'; return m.querySelector(`[data-st="${a}"]`) ? a : 'geral'; } catch { return 'geral'; } })());
     const sel = m.querySelector('#st-casa');
     if (sel) sel.onchange = async () => { await salvaCasa(sel.value); fechar(); abreEstatisticas(); };
-    // municípios (lista do IBGE) e UNESCO (base) chegam depois
-    carregaMunicipios().then(mun => {
-      const totUF = new Map(); mun.forEach(x => totUF.set(x.uf, (totUF.get(x.uf) || 0) + 1));
-      const visUF = new Map(); ibgeVis.forEach(c => { const x = S.munPorCod.get(c); if (x) visUF.set(x.uf, (visUF.get(x.uf) || 0) + 1); });
-      const t = m.querySelector('#st-mun-total'); if (t) t.innerHTML = barra('Municípios', ibgeVis.size, mun.length);
-      const box = m.querySelector('#st-mun-uf'); if (!box) return;
-      const linhas = [...visUF].map(([uf, n]) => [uf, n, totUF.get(uf)]).sort((a, b) => b[1] / b[2] - a[1] / a[2] || b[1] - a[1]);
-      box.innerHTML = linhas.length ? linhas.map(([uf, n, t]) => barra(`${nomeEstado('BR-' + uf) || uf} · ${pct(n, t)}`, n, t)).join('') : '<p class="meta">Nenhum município ainda.</p>';
-    }).catch(() => { const box = m.querySelector('#st-mun-uf'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar a lista do IBGE.</p>'; });
+    // aba País: o que você conhece de cada país (no Brasil, mais os dados do IBGE)
+    const desenhaPais = cc => {
+      const box = m.querySelector('#st-pais'); if (!box) return;
+      m.querySelectorAll('[data-st-pais]').forEach(b => b.setAttribute('aria-pressed', b.dataset.stPais === cc));
+      try { localStorage.setItem('poa-st-pais', cc); } catch {}
+      const ests = S.estados.filter(e => e.pais === cc), estsVis = ests.filter(e => estadosVis.has(e.id));
+      const noPais = visitados.filter(l => l.pais === cc), cids = noPais.filter(l => l.tipo === 'cidade');
+      const conta = t => noPais.filter(l => (t === 'transporte' ? l.tipo === 'aeroporto' || l.tipo === 'porto' : l.tipo === t)).length;
+      const ehBR = cc === 'BR';
+      box.innerHTML = `
+        <h4>Estados e províncias</h4>
+        ${ests.length ? barra(ehBR ? 'Estados' : 'Estados/províncias', estsVis.length, ests.length) : ''}
+        ${estsVis.length ? `<p class="meta">${esc(estsVis.map(e => nomeEstado(e.id)).sort((a, b) => a.localeCompare(b, 'pt-BR')).join(', '))}</p>` : ''}
+        ${ehBR ? `${barra('Capitais', capitais, 27)}<div id="st-mun-total"></div>
+          <h4>Por região</h4>${Object.entries(REGIOES_BR).map(([r, ufs]) => barra(r, ufs.filter(u => ufsBR.has(u)).length, ufs.length)).join('')}` : ''}
+        <h4>Cidades</h4><div id="st-pais-cid"><div class="tabela"><span>Cidades visitadas</span><b>${num(cids.length)}</b></div></div>
+        ${ehBR ? '<h4>Municípios por estado</h4><div id="st-mun-uf"><p class="meta">Carregando…</p></div>' : ''}
+        <h4>Patrimônios da UNESCO</h4><div id="st-unesco"><p class="meta">Carregando…</p></div>
+        <h4>Outros lugares</h4><div class="tabela">
+          <span>Aeroportos e portos</span><b>${num(conta('transporte'))}</b>
+          <span>Atrações e parques</span><b>${num(conta('atracao'))}</b>
+          <span>Museus</span><b>${num(conta('museu'))}</b></div>`;
+      carregaPop().then(() => {
+        const alvo = m.querySelector('#st-pais-cid'); if (!alvo) return;
+        const cp = cids.map(l => ({ l, p: popCidade(l) })).filter(x => x.p).sort((a, b) => b.p.pop - a.p.pop);
+        if (!cp.length) return;
+        alvo.innerHTML = `<div class="tabela"><span>Cidades visitadas</span><b>${num(cids.length)}</b>
+          <span>Maior</span><b>${esc(cp[0].l.nome)} · ${fmtHab(cp[0].p.pop)}</b>
+          ${cp.length > 1 ? `<span>Menor</span><b>${esc(cp[cp.length - 1].l.nome)} · ${fmtHab(cp[cp.length - 1].p.pop)}</b>` : ''}</div>`;
+      }).catch(() => {});
+      if (ehBR) carregaMunicipios().then(mun => {
+        const totUF = new Map(); mun.forEach(x => totUF.set(x.uf, (totUF.get(x.uf) || 0) + 1));
+        const visUF = new Map(); ibgeVis.forEach(c => { const x = S.munPorCod.get(c); if (x) visUF.set(x.uf, (visUF.get(x.uf) || 0) + 1); });
+        const t = m.querySelector('#st-mun-total'); if (t) t.innerHTML = barra('Municípios', ibgeVis.size, mun.length);
+        const caixa = m.querySelector('#st-mun-uf'); if (!caixa) return;
+        const linhas = [...visUF].map(([uf, n]) => [uf, n, totUF.get(uf)]).sort((a, b) => b[1] / b[2] - a[1] / a[2] || b[1] - a[1]);
+        caixa.innerHTML = linhas.length ? linhas.map(([uf, n, t]) => barra(`${nomeEstado('BR-' + uf) || uf} · ${pct(n, t)}`, n, t)).join('') : '<p class="meta">Nenhum município ainda.</p>';
+      }).catch(() => { const caixa = m.querySelector('#st-mun-uf'); if (caixa) caixa.innerHTML = '<p class="meta">Sem conexão para carregar a lista do IBGE.</p>'; });
+      carregaBase('unesco').then(base => {
+        const caixa = m.querySelector('#st-unesco'); if (!caixa) return;
+        const doPais = base.filter(b => (b.paises || [b.pais]).includes(cc));
+        const feitos = new Set(S.lugares.filter(l => l.tipo === 'unesco' && visitado(l.id, vis)).map(l => l.ref_externa));
+        caixa.innerHTML = doPais.length ? barra('Visitados', doPais.filter(b => feitos.has(b.ref)).length, doPais.length) : '<p class="meta">Este país não tem patrimônio da UNESCO.</p>';
+      }).catch(() => { const caixa = m.querySelector('#st-unesco'); if (caixa) caixa.innerHTML = '<p class="meta">Sem conexão para carregar a lista da UNESCO.</p>'; });
+    };
+    m.querySelectorAll('[data-st-pais]').forEach(b => b.onclick = () => desenhaPais(b.dataset.stPais));
+    if (paisesStats.length) desenhaPais((() => { try { const p = localStorage.getItem('poa-st-pais'); return paisesStats.includes(p) ? p : paisesStats[0]; } catch { return paisesStats[0]; } })());
     // ranking dos seus aeroportos: Brasil (ANAC) e mundo (top 50 do ACI)
     carregaRanking().then(rk => {
       const box = m.querySelector('#st-aero'); if (!box) return;
@@ -2461,20 +2500,6 @@ function abreEstatisticas() {
         ${brs.length ? `<span>Moradores das cidades do Brasil que você visitou</span><b>${fmtHab(brs.reduce((t, x) => t + x.p.pop, 0))}</b>` : ''}</div>
         <p class="meta">Metrópole: 1 milhão de habitantes ou mais · grande: 500 mil a 1 milhão · média: 100 a 500 mil · pequena: menos de 100 mil. Brasil: IBGE ${popCidades.brasil.ano}; fora: GeoNames, aproximado.</p>`;
     }).catch(() => { const box = m.querySelector('#st-cid'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar a população.</p>'; });
-    carregaBase('museu').then(base => {
-      const box = m.querySelector('#st-museus'); if (!box) return;
-      const feitos = new Set(S.lugares.filter(l => l.tipo === 'museu' && visitado(l.id, vis)).map(l => l.ref_externa));
-      box.innerHTML = barra('Visitados', base.filter(b => feitos.has(b.ref)).length, base.length) + '<p class="meta">Museus abertos do Cadastro Nacional de Museus (IBRAM).</p>';
-    }).catch(() => { const box = m.querySelector('#st-museus'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar a lista.</p>'; });
-    carregaBase('unesco').then(base => {
-      const box = m.querySelector('#st-unesco'); if (!box) return;
-      const br = base.filter(b => (b.paises || [b.pais]).includes('BR'));
-      const feitos = new Set(S.lugares.filter(l => l.tipo === 'unesco' && visitado(l.id, vis)).map(l => l.ref_externa));
-      const falta = br.filter(b => !feitos.has(b.ref));
-      const perto = c0 ? falta.map(b => [b, distKm(c0.lat, c0.lon, b.lat, b.lon)]).sort((a, b) => a[1] - b[1]).slice(0, 3) : [];
-      box.innerHTML = barra('Visitados', br.length - falta.length, br.length)
-        + (perto.length ? `<h5>Os que faltam mais perto de casa</h5><div class="aero-lista">${perto.map(([b, d]) => `<div class="aero-linha"><span class="aero-nome">${esc(b.nome)}</span><span class="aero-pos"><span>${fmtKm(Math.round(d))}</span></span></div>`).join('')}</div>` : '');
-    }).catch(() => { const box = m.querySelector('#st-unesco'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar a lista da UNESCO.</p>'; });
   });
 }
 
