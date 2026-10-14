@@ -1,3 +1,4 @@
+tentativa 1 falhou: ('Connection broken: IncompleteRead(52854527 bytes read, 307108562 more expected)', IncompleteRead(52854527 bytes read, 307108562 more expected))
 ANAC Atualizado em: 2026-10-13 ano 2025 aeroportos 162
 Wikipedia/ACI ano 2025 aeroportos 50
 ANAC Argentina 2026 incompleto: 8 meses
@@ -18,3 +19,6 @@ museus lidos 4149 abertos com coordenadas 3655
 IBGE ano 2026 municípios 5571
 GeoNames cidades 29442
 ok cidades
+Aeroportos 3244 novos [] saíram []
+mudança suspeita: 31 renomeados, 0 novos — nada gravado
+FALHOU BASES
