@@ -459,7 +459,6 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
     <button data-nav="mapa" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg><span>Mapa</span></button>
     <button data-nav="band"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg><span>Bandeiras</span></button>
     <button data-nav="est"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Estatísticas</span></button>
-    <button data-nav="viagens"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17h18M6 17l2-6h8l2 6M9 11V7a3 3 0 0 1 6 0v4"/></svg><span>Viagens</span></button>
     <button data-nav="mais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>Mais</span></button>
   </nav>
 </div>
@@ -1317,7 +1316,8 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
     </div>
     <div class="aviso-mun" id="f-aviso" hidden></div>
     <div class="campo"><span class="rotulo-campo">Rótulos</span><div class="chips" id="f-chips">${chips}</div></div>
-    <div class="campo"><span class="rotulo-campo">Quando esteve</span>
+    ${l.id && visitasDe(l.id).length ? '' : '<button type="button" class="add-pais" id="f-mostra-data" style="margin:0 0 12px;width:100%">+ Adicionar data</button>'}
+    <div class="campo" id="f-quando" ${l.id && visitasDe(l.id).length ? '' : 'hidden'}><span class="rotulo-campo">Quando esteve</span>
       <div class="chips" id="f-visitas"></div>
       <div class="add-visita">
         <select id="f-prec" aria-label="Precisão da data"><option value="mes">Mês e ano</option><option value="dia">Dia exato</option><option value="ano">Só o ano</option></select>
@@ -1345,6 +1345,8 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
       box.querySelectorAll('[data-tira]').forEach(b => b.onclick = () => { const [v] = visitas.splice(+b.dataset.tira, 1); if (v.id) removidas.push(v.id); desenhaVisitas(); });
     };
     desenhaVisitas();
+    const mostraData = m.querySelector('#f-mostra-data');
+    if (mostraData) mostraData.onclick = () => { mostraData.remove(); m.querySelector('#f-quando').hidden = false; };
     const campoData = m.querySelector('#f-data'), campoPrec = m.querySelector('#f-prec');
     campoPrec.onchange = () => {
       const p = campoPrec.value; campoData.value = '';
@@ -2285,7 +2287,7 @@ function abreEstatisticas() {
     </div>
     <p class="meta">A área soma cada estado ou província onde você esteve, inteiro: passar por Manaus conta o Amazonas todo. É o mesmo critério do Places Been.</p>
     <div class="abas-band st-abas" role="tablist">
-      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="brasil">Brasil</button><button role="tab" data-st="aero">Aeroportos</button><button role="tab" data-st="viagens">Viagens</button>
+      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="brasil">Brasil</button><button role="tab" data-st="aero">Aeroportos</button>${(S.viagens || []).length >= 3 ? '<button role="tab" data-st="viagens">Viagens</button>' : ''}
     </div>
     <section data-st-sec="geral">
       <h4>Por continente</h4>
@@ -2328,7 +2330,7 @@ function abreEstatisticas() {
       try { localStorage.setItem('poa-st-aba', aba); } catch {}
     };
     m.querySelectorAll('[data-st]').forEach(b => b.onclick = () => mostraAba(b.dataset.st));
-    mostraAba((() => { try { return localStorage.getItem('poa-st-aba') || 'geral'; } catch { return 'geral'; } })());
+    mostraAba((() => { try { const a = localStorage.getItem('poa-st-aba') || 'geral'; return m.querySelector(`[data-st="${a}"]`) ? a : 'geral'; } catch { return 'geral'; } })());
     const sel = m.querySelector('#st-casa');
     if (sel) sel.onchange = async () => { await salvaCasa(sel.value); fechar(); abreEstatisticas(); };
     // municípios (lista do IBGE) e UNESCO (base) chegam depois
@@ -2632,6 +2634,7 @@ function abreMenu() {
   abreModal(`
     <h3>Menu</h3>
     <div class="menu-lista">
+      <button id="m-viagens">Viagens<small>Roteiros, trechos e quilômetros</small></button>
       <button id="m-tempo">Linha do tempo<small>Suas visitas por ano e mês</small></button>
       <button id="m-card">Imagem para compartilhar<small>Mapa e números prontos para WhatsApp e Instagram</small></button>
       <button id="m-comp">Compartilhar meu mapa<small>Link só de leitura para amigos e família</small></button>
