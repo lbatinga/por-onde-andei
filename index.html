@@ -1120,6 +1120,26 @@ function criaBotaoLocalizar() {
   });
   return new C();
 }
+// Botão "ver tudo": enquadra todos os seus lugares da lista aberta (fica logo abaixo do "onde estou")
+function verTudo() {
+  const ls = camadaPinos.getLayers();
+  // no celular a lista cobre a parte de baixo do mapa: enquadra só na parte visível
+  const painel = $('#painel'), sobre = painel && innerWidth < 900 ? painel.getBoundingClientRect().height : 0;
+  if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1), { paddingTopLeft: [20, 20], paddingBottomRight: [20, sobre + 20] }); else mapa.setView([0, 0], 2);
+}
+function criaBotaoVerTudo() {
+  const C = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const div = L.DomUtil.create('div', 'leaflet-bar ctl-local');
+      div.innerHTML = '<a href="#" role="button" title="Ver todos os meus lugares" aria-label="Ver todos os meus lugares"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></a>';
+      L.DomEvent.disableClickPropagation(div);
+      div.querySelector('a').onclick = ev => { ev.preventDefault(); verTudo(); };
+      return div;
+    },
+  });
+  return new C();
+}
 function irParaMim(div) {
   if (!navigator.geolocation) return toast('Este aparelho não informa a localização');
   div.classList.add('buscando');
@@ -1152,6 +1172,7 @@ function iniciaMapa() {
     iconCreateFunction: c => L.divIcon({ html: `<div>${c.getChildCount()}</div>`, className: 'grupo-pinos', iconSize: [36, 36] }),
   }) : L.layerGroup()).addTo(mapa);
   L.control.localizar = criaBotaoLocalizar(); L.control.localizar.addTo(mapa);
+  criaBotaoVerTudo().addTo(mapa);
 
   const ajustaZoom = () => {
     const z = mapa.getZoom(), el = mapa.getContainer();
@@ -2681,13 +2702,11 @@ function abreMenuPublico() {
       <button id="m-est">Estatísticas<small>Países, continentes e área do mundo</small></button>
       <button id="m-band">Bandeiras<small>Países visitados</small></button>
       <button id="m-card">Imagem do mapa<small>Para salvar ou enviar</small></button>
-      <button id="m-tudo">Ver tudo no mapa</button>
       <a class="menu-link" href="/">Criar o meu mapa</a>
     </div>`, (m, fechar) => {
     m.querySelector('#m-est').onclick = () => { fechar(); abreEstatisticas(); };
     m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); };
     m.querySelector('#m-card').onclick = () => { fechar(); abreCard(); };
-    m.querySelector('#m-tudo').onclick = () => { fechar(); const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); };
   });
 }
 
@@ -2786,7 +2805,6 @@ function abreMenu() {
       <button id="m-comp">Compartilhar meu mapa<small>Link só de leitura para amigos e família</small></button>
       <button id="m-backup">Baixar meus dados<small>Cópia em planilha ou arquivo completo</small></button>
       <button id="m-rot">Rótulos<small>Criar, renomear, mudar cor</small></button>
-      <button id="m-tudo">Ver todos os meus lugares no mapa</button>
       <button id="m-sair">Sair<small>${esc(S.user?.email || '')}</small></button>
     </div>`, (m, fechar) => {
     m.querySelector('#m-rot').onclick = () => { fechar(); abreRotulos(); };
@@ -2797,7 +2815,6 @@ function abreMenu() {
     m.querySelector('#m-band') && (m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); });
     m.querySelector('#m-comp').onclick = () => { fechar(); abreCompartilhar(); };
     m.querySelector('#m-backup').onclick = () => { fechar(); abreBackup(); };
-    m.querySelector('#m-tudo').onclick = () => { fechar(); const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); };
     m.querySelector('#m-sair').onclick = async () => { if (fila.length && !confirmaSaida()) return; try { localStorage.removeItem(CHAVE_COPIA); localStorage.removeItem(CHAVE_FILA); } catch {} await supa.auth.signOut(); location.reload(); };
   });
 }
@@ -2900,13 +2917,13 @@ function montaApp() {
   document.body.classList.toggle('publico', !!S.publico);
   iniciaMapa(); atualizaTudo();
   carregaBase('unesco').then(() => atualizaTudo()).catch(() => {});
-  const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1));
+  setTimeout(verTudo, 350); // espera a lista se acomodar para descontar a altura dela
 
   $('#contadores').addEventListener('click', e => { const b = e.target.closest('.contador'); if (!b) return; if (b.dataset.extras) return abreExtras(); S.aba = b.dataset.aba; S.filtro = ''; $('#filtro').value = ''; atualizaTudo(); });
   let tLista; mapa.on('moveend', () => { clearTimeout(tLista); tLista = setTimeout(() => { renderLista(); desenhaBase(); }, 120); });
   $('#lista').addEventListener('click', e => {
     if (e.target.closest('[data-ver-todos]')) {
-      const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1)); else mapa.setView([0, 0], 2);
+      verTudo();
       return;
     }
     const mk = e.target.closest('.marca');
