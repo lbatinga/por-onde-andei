@@ -356,6 +356,9 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .pp-ano .barra { height: 8px; background: var(--surface-2); border-radius: 9px; overflow: hidden; } .pp-ano .barra i { display: block; height: 100%; background: var(--visit); border-radius: 9px; }
 .pp-nota { margin-top: 14px !important; font-size: .7rem; }
 #vo-pass, [data-vo-sec] { min-width: 0; }
+.pp-carteira { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-top: 10px; padding: 12px; border: 0; border-radius: 99px; background: #1f1f1f; color: #fff; font: 600 .92rem var(--f-body, system-ui); cursor: pointer; }
+.pp-carteira svg { width: 20px; height: 20px; }
+.pp-carteira:disabled { opacity: .6; }
 .voo-card { display: flex; box-sizing: border-box; min-width: 0; max-width: 100%; overflow: hidden; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font: inherit; color: var(--ink); cursor: pointer; }
 .voo-rota { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; min-width: 96px; }
 .voo-rota b { font-size: 1.05rem; font-weight: 800; letter-spacing: .02em; }
@@ -1431,6 +1434,7 @@ function abreExtras() {
 function atualizaTudo() {
   agendaCopia();
   agendaSelos();
+  agendaCarteira();
   const c = calcula();
   if (camadaPaises) { ajustaCamadaEstados(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); desenhaPinos(); desenhaMunicipios(); desenhaRotas(); }
   document.querySelectorAll('.rot-mapa div[data-pais]').forEach(d => d.parentElement.classList.toggle('visitado', paisesVis.has(d.dataset.pais)));
@@ -3188,7 +3192,7 @@ function abreVoos() {
       <section data-vo-sec="pass"><div id="vo-pass"><p class="meta">Carregando…</p></div></section>
       <section data-vo-sec="lista" hidden><div id="vo-corpo"></div><p class="meta">Busca de voos: dados da <a href="https://aerodatabox.com" target="_blank" rel="noopener">AeroDataBox</a>.</p></section>
       <div class="acoes"><button class="btn" id="vo-fechar">Fechar</button><button class="btn principal" id="vo-novo">Novo voo</button></div>`, (m, fechar) => {
-      const passaporte = () => htmlPassaporte().then(h => { const box = m.querySelector('#vo-pass'); if (box) { box.innerHTML = h; carregaFotos(box); } }).catch(() => {});
+      const passaporte = () => htmlPassaporte().then(h => { const box = m.querySelector('#vo-pass'); if (box) { box.innerHTML = h; carregaFotos(box); const bc = box.querySelector('#pp-carteira'); if (bc) bc.onclick = () => adicionaCarteira(bc); } }).catch(() => {});
       const aba = a => { m.querySelectorAll('[data-vo]').forEach(b => b.setAttribute('aria-selected', b.dataset.vo === a)); m.querySelectorAll('[data-vo-sec]').forEach(x => x.hidden = x.dataset.voSec !== a); try { localStorage.setItem('poa-vo-aba', a); } catch {} };
       m.querySelectorAll('[data-vo]').forEach(b => b.onclick = () => aba(b.dataset.vo));
       aba((() => { try { return (S.voos || []).length ? localStorage.getItem('poa-vo-aba') || 'pass' : 'lista'; } catch { return 'pass'; } })());
@@ -3480,6 +3484,7 @@ async function htmlPassaporte() {
   const maxAno = Math.max(...[...anos.values()].map(l => l.length));
   const linha = [...anos].sort((a, b) => b[0].localeCompare(a[0])).map(([a, l]) => `<div class="pp-ano"><span>${a}</span><div class="barra"><i style="width:${l.length / maxAno * 100}%"></i></div><b>${pl(l.length, 'voo', 'voos')} · ${fmtKm(l.reduce((t, v) => t + kmVoo(v), 0))}</b></div>`).join('');
   return `${capa}
+    ${S.publico ? '' : `<button class="pp-carteira" id="pp-carteira"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 14.5h2"/></svg>Adicionar à Carteira do Google</button>`}
     <h4 class="pp-h">Rotas <small>mais grossa = mais vezes</small></h4>${mapaRotasSvg(vs)}
     <h4 class="pp-h">Carimbos <small>um por aeroporto · 1ª vez</small></h4><div class="pp-pagina"><div class="pp-carimbos">${carimbos}</div><p>Cor do carimbo = país · ✈ = voos por ali</p></div>
     <h4 class="pp-h">Recordes</h4>${recordes}
@@ -3488,6 +3493,47 @@ async function htmlPassaporte() {
     <h4 class="pp-h">Aviões <small>toque para ver as fotos</small></h4>${aviaoHtml}
     <h4 class="pp-h">Por viagem</h4>${viagens}
     <p class="meta pp-nota">Distâncias em linha reta pela curva da Terra.${estimado ? ' Sem horário registrado, o tempo é estimado pela distância.' : ''} Fotos: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a> (pela matrícula) ou Wikipédia (pelo modelo), com o crédito de cada foto. Logos das companhias: Travelpayouts. Busca de voos: AeroDataBox e ANAC (VRA).</p>`;
+}
+// ---- Carteira do Google: cartão "Passaporte de voos" (função carteira no servidor)
+function resumoCarteira() {
+  const vs = [...(S.voos || [])].sort((a, b) => a.data.localeCompare(b.data) || (a.partida || '').localeCompare(b.partida || ''));
+  if (!vs.length || !S.baseAero) return null;
+  const km = vs.reduce((t, v) => t + kmVoo(v), 0), min = vs.reduce((t, v) => t + minVoo(v), 0);
+  const aps = new Set(vs.flatMap(v => [v.origem, v.destino])), paises = new Set([...aps].map(i => aeroPorIata(i)?.pais).filter(Boolean));
+  const cias = new Set(vs.map(v => v.cia_nome || v.cia).filter(Boolean));
+  const u = vs.at(-1), longo = [...vs].sort((a, b) => kmVoo(b) - kmVoo(a))[0];
+  const mods = new Map(); vs.forEach(v => v.modelo && mods.set(v.modelo, (mods.get(v.modelo) || 0) + 1));
+  const a0 = vs[0].data.slice(0, 4), a1 = u.data.slice(0, 4);
+  return { voos: String(vs.length), km: km.toLocaleString('pt-BR'), horas: fmtHoras(min), paises: String(paises.size), aeroportos: String(aps.size), cias: String(cias.size),
+    periodo: a0 === a1 ? a0 : `${a0}–${a1}`,
+    ultimo: [u.numero, `${u.origem} → ${u.destino}`, dataCurta(u.data)].filter(Boolean).join(' · '),
+    longo: longo && kmVoo(longo) ? `${longo.origem} → ${longo.destino} · ${fmtKm(kmVoo(longo))}` : '',
+    avioes: [...mods].sort((a, b) => b[1] - a[1]).map(([m, n]) => `${m} ×${n}`).join(' · ') };
+}
+async function adicionaCarteira(botao) {
+  await carregaBase('aeroporto').catch(() => {});
+  const resumo = resumoCarteira(); if (!resumo) return toast('Cadastre um voo primeiro.');
+  botao.disabled = true; const txt = botao.innerHTML; botao.textContent = 'Preparando o cartão…';
+  const { data, error } = await supa.functions.invoke('carteira', { body: { acao: 'link', resumo } });
+  botao.disabled = false; botao.innerHTML = txt;
+  if (error || !data?.url) {
+    let corpo = null; try { corpo = await error?.context?.json?.(); } catch {}
+    return toast(corpo?.erro === 'sem_chave' ? 'A Carteira do Google ainda não foi configurada no servidor.' : 'Não deu para criar o cartão agora. Tente de novo mais tarde.', 4500);
+  }
+  try { localStorage.setItem('poa-carteira', JSON.stringify(resumo)); } catch {}
+  window.open(data.url, '_blank', 'noopener');
+}
+// cartão já na carteira: quando os números mudam, atualiza sozinho (o Google leva alguns minutos para mostrar)
+let tCarteira;
+function agendaCarteira() {
+  let antes; try { antes = localStorage.getItem('poa-carteira'); } catch {}
+  if (!antes || S.publico || !S.user) return;
+  clearTimeout(tCarteira); tCarteira = setTimeout(async () => {
+    const resumo = resumoCarteira(); if (!resumo) return;
+    const novo = JSON.stringify(resumo); if (novo === antes) return;
+    const { error } = await supa.functions.invoke('carteira', { body: { acao: 'atualizar', resumo } });
+    if (!error) try { localStorage.setItem('poa-carteira', novo); } catch {}
+  }, 4000);
 }
 // depois de desenhar: carrega as fotos (uma por matrícula)
 function carregaFotos(caixa) {
