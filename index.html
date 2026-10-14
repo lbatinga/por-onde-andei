@@ -585,6 +585,7 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
   <nav class="barra-nav" id="barra-nav">
     <button data-nav="mapa" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg><span>Mapa</span></button>
     <button data-nav="band"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg><span>Bandeiras</span></button>
+    <button data-nav="voos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg><span>Voos</span></button>
     <button data-nav="est"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Estatísticas</span></button>
     <button data-nav="mais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>Mais</span></button>
   </nav>
@@ -3518,7 +3519,6 @@ function abreMenu() {
   abreModal(`
     <h3>Menu</h3>
     <div class="menu-lista">
-      <button id="m-voos">Voos<small>Diário de bordo: companhias, aviões e rotas</small></button>
       <button id="m-viagens">Viagens<small>Roteiros, trechos e quilômetros</small></button>
       <button id="m-tempo">Linha do tempo<small>Suas visitas por ano e mês</small></button>
       <button id="m-card">Imagem para compartilhar<small>Mapa e números prontos para WhatsApp e Instagram</small></button>
@@ -3530,7 +3530,6 @@ function abreMenu() {
     m.querySelector('#m-rot').onclick = () => { fechar(); abreRotulos(); };
     m.querySelector('#m-tempo').onclick = () => { fechar(); abreLinhaDoTempo(); };
     m.querySelector('#m-viagens') && (m.querySelector('#m-viagens').onclick = () => { fechar(); abreViagens(); });
-    m.querySelector('#m-voos').onclick = () => { fechar(); abreVoos(); };
     m.querySelector('#m-card').onclick = () => { fechar(); abreCard(); };
     m.querySelector('#m-est') && (m.querySelector('#m-est').onclick = () => { fechar(); abreEstatisticas(); });
     m.querySelector('#m-band') && (m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); });
@@ -3606,10 +3605,15 @@ function ligaNavegacao() {
   if (S.publico) nav.hidden = true;
   const marca = k => nav.querySelectorAll('button').forEach(b => b.dataset.nav === k ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
   const fechaModais = () => document.querySelectorAll('#modais .fundo').forEach(f => f.remove());
-  const acoes = { mapa: () => {}, band: () => abreBandeiras(), est: () => abreEstatisticas(), viagens: () => abreViagens(), mais: () => abreMenu() };
-  nav.querySelectorAll('button').forEach(b => b.onclick = () => { fechaModais(); marca(b.dataset.nav); acoes[b.dataset.nav](); });
+  const acoes = { mapa: () => {}, band: () => abreBandeiras(), voos: () => abreVoos(), est: () => abreEstatisticas(), viagens: () => abreViagens(), mais: () => abreMenu() };
+  // telas que carregam dados antes de abrir (Bandeiras, Voos): a marcação espera a tela aparecer
+  let pendente = null;
+  nav.querySelectorAll('button').forEach(b => b.onclick = () => { pendente = b.dataset.nav === 'mapa' ? null : b.dataset.nav; fechaModais(); marca(b.dataset.nav); acoes[b.dataset.nav](); });
   // ao fechar qualquer tela, a barra volta para "Mapa"
-  new MutationObserver(() => { if (!document.querySelector('#modais .fundo')) marca('mapa'); }).observe($('#modais'), { childList: true });
+  new MutationObserver(() => {
+    if (document.querySelector('#modais .fundo')) { if (pendente) { marca(pendente); pendente = null; } }
+    else if (!pendente) marca('mapa');
+  }).observe($('#modais'), { childList: true });
 }
 // lista em gaveta: três alturas (fechada, meia, cheia); arrasta pela alça ou toca para alternar
 function ligaGaveta() {
