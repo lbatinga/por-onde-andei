@@ -82,6 +82,9 @@ body.publico #btn-menu { display: grid; }
 .contadores::-webkit-scrollbar { display: none; }
 .contador { flex: 1 0 auto; border: 0; background: none; padding: 6px 8px; margin: 6px 0; display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; border-radius: 99px; color: var(--ink); }
 .contador svg { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.contador.extras { flex: 0 0 auto; border-left: 1px solid var(--line); border-radius: 0 99px 99px 0; padding-left: 10px; opacity: .85; }
+.contador.extras[aria-pressed="true"] { opacity: 1; border-radius: 99px; }
+.menu-lista button svg { width: 18px; height: 18px; vertical-align: -3px; margin-right: 4px; color: var(--muted); }
 .contador b { font: 800 1rem/1.1 var(--f-display); font-variant-numeric: tabular-nums; }
 .contador[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .contador[aria-pressed="true"] { background: var(--visit); color: #04201c; } :root:not([data-theme="light"]) .contador[aria-pressed="true"] svg { color: #04201c; } }
@@ -1225,24 +1228,33 @@ function calcula() {
   }
   return cont;
 }
+const EXTRAS = [['unesco', 'Patrimônios da UNESCO'], ['atracao', 'Atrações e parques'], ['museu', 'Museus']];
+function abreExtras() {
+  const c = calcula();
+  abreModal(`<h3>Outros lugares</h3>
+    <div class="menu-lista">${EXTRAS.map(([k, nome]) => `<button data-extra="${k}">${ICONES[k]} ${esc(nome)}<small>${num(c[k])} ${c[k] === 1 ? "marcado" : "marcados"}</small></button>`).join('')}</div>`, (m, fechar) => {
+    m.querySelectorAll('[data-extra]').forEach(b => b.onclick = () => { fechar(); S.aba = b.dataset.extra; S.filtro = ''; $('#filtro').value = ''; atualizaTudo(); });
+  });
+}
 function atualizaTudo() {
   agendaCopia();
   const c = calcula();
   if (camadaPaises) { ajustaCamadaEstados(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); desenhaPinos(); }
   document.querySelectorAll('.rot-mapa div[data-pais]').forEach(d => d.parentElement.classList.toggle('visitado', paisesVis.has(d.dataset.pais)));
   const totalPaises = S.paises.length;
+  // núcleo do app em destaque; UNESCO, atrações e museus ficam juntos no último botão
   const itens = [
     ['paises', `${paisesVis.size}<small>/${totalPaises}</small>`, 'Países'],
     ['estados', estadosVis.size, 'Estados'],
     ['cidade', c.cidade, 'Cidades'],
-    ['unesco', c.unesco, 'UNESCO'],
-    ['transporte', c.aeroporto + c.porto, 'Aerop. e portos'],
-    ['atracao', c.atracao, 'Atrações e parques'],
-    ['museu', c.museu, 'Museus'],
+    ['transporte', c.aeroporto + c.porto, 'Aeroportos e portos'],
   ];
   const ICONE_ABA = { paises: ICONES.pais, estados: ICONES.estado, cidade: ICONES.cidade, unesco: ICONES.unesco, transporte: ICONES.aeroporto, atracao: ICONES.atracao, museu: ICONES.museu };
+  const extra = EXTRAS.find(([k]) => k === S.aba);
+  const MAIS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>';
   $('#contadores').innerHTML = itens.map(([k, v, t]) =>
-    `<button class="contador" data-aba="${k}" aria-pressed="${S.aba === k}" title="${t}">${ICONE_ABA[k] || ''}<b>${v}</b></button>`).join('');
+    `<button class="contador" data-aba="${k}" aria-pressed="${S.aba === k}" title="${t}">${ICONE_ABA[k] || ''}<b>${v}</b></button>`).join('')
+    + `<button class="contador extras" data-extras="1" aria-pressed="${!!extra}" title="${extra ? extra[1] : 'UNESCO, atrações e museus'}">${extra ? ICONE_ABA[extra[0]] + `<b>${c[extra[0]]}</b>` : MAIS + `<b>${c.unesco + c.atracao + c.museu}</b>`}</button>`;
   renderLista(); desenhaBase();
 }
 function linhaLugar(l) {
@@ -2890,7 +2902,7 @@ function montaApp() {
   carregaBase('unesco').then(() => atualizaTudo()).catch(() => {});
   const ls = camadaPinos.getLayers(); if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1));
 
-  $('#contadores').addEventListener('click', e => { const b = e.target.closest('.contador'); if (!b) return; S.aba = b.dataset.aba; S.filtro = ''; $('#filtro').value = ''; atualizaTudo(); });
+  $('#contadores').addEventListener('click', e => { const b = e.target.closest('.contador'); if (!b) return; if (b.dataset.extras) return abreExtras(); S.aba = b.dataset.aba; S.filtro = ''; $('#filtro').value = ''; atualizaTudo(); });
   let tLista; mapa.on('moveend', () => { clearTimeout(tLista); tLista = setTimeout(() => { renderLista(); desenhaBase(); }, 120); });
   $('#lista').addEventListener('click', e => {
     if (e.target.closest('[data-ver-todos]')) {
