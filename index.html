@@ -1135,7 +1135,14 @@ function centraVisivel(ll, zoom) {
 }
 // Botão "ver tudo": enquadra todos os seus lugares da lista aberta (fica logo abaixo do "onde estou")
 function verTudo() {
-  const ls = camadaPinos.getLayers();
+  // enquadra só onde você esteve (os "quero ir" ficam na lista, mas não puxam o mapa)
+  const todos = camadaPinos.getLayers(), estive = todos.filter(m => m.options.esteve);
+  let ls = estive.length ? estive : todos;
+  if (!todos.length && (S.aba === 'paises' || S.aba === 'estados')) {
+    calcula();
+    const caixas = S.aba === 'paises' ? [...paisesVis].map(id => S.paisPorId.get(id)?.maior) : [...estadosVis].map(id => S.estadoPorId.get(id)?.bbox);
+    ls = caixas.filter(Boolean).map(b => L.rectangle([[b[1], b[0]], [b[3], b[2]]]));
+  }
   // no celular a lista cobre a parte de baixo do mapa: enquadra só na parte visível
   const sobre = alturaLista();
   if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1), { paddingTopLeft: [20, 20], paddingBottomRight: [20, sobre + 20] }); else mapa.setView([0, 0], 2);
