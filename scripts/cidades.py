@@ -49,12 +49,11 @@ def mundo():
 
 def main():
     ano, pop = brasil()
-    saida = {
-        "brasil": {"ano": ano, "fonte": "IBGE, estimativa da população", "pop": pop},
-        "mundo": {"fonte": "GeoNames (cidades com 15 mil habitantes ou mais)", "lista": mundo()},
-    }
+    # dois arquivos: o do Brasil é pequeno e o app carrega logo; o do mundo (~1 MB) só quando precisa
     with open("cidades-pop.json", "w", encoding="utf-8") as f:
-        json.dump(saida, f, ensure_ascii=False, separators=(",", ":"))
+        json.dump({"brasil": {"ano": ano, "fonte": "IBGE, estimativa da população", "pop": pop}}, f, ensure_ascii=False, separators=(",", ":"))
+    with open("cidades-mundo.json", "w", encoding="utf-8") as f:
+        json.dump({"fonte": "GeoNames (cidades com 15 mil habitantes ou mais)", "lista": mundo()}, f, ensure_ascii=False, separators=(",", ":"))
     print("ok cidades", file=sys.stderr)
 
 

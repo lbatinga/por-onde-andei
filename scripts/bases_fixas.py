@@ -102,7 +102,7 @@ def municipios():
             novos.append(m["nome"])
     # trava de segurança: mudança grande demais é sinal de dado errado, não de realidade
     if len(renomeados) > 20 or len(novos) > 20:
-        raise SystemExit(f"mudança suspeita: {len(renomeados)} renomeados, {len(novos)} novos — nada gravado")
+        raise SystemExit(f"mudança suspeita: {len(renomeados)} renomeados, {len(novos)} novos — nada gravado. Exemplos: {renomeados[:40]} {novos[:20]}")
     vistos = {str(x[0]) for x in saida}
     saida += [list(x) for c, x in atual.items() if c not in vistos]   # nunca apaga município
     saida.sort(key=lambda x: x[1])
