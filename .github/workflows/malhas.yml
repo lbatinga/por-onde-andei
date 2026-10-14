@@ -1,0 +1,26 @@
+name: Malhas dos municípios (IBGE)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 15 2 *'   # uma vez por ano: o IBGE atualiza a malha no começo do ano
+  push:
+    branches: [main]
+    paths: ['scripts/malhas.py', '.github/workflows/malhas.yml']
+permissions:
+  contents: write
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install requests
+      - run: python scripts/malhas.py 2> scripts/malhas-log.txt; cat scripts/malhas-log.txt
+      - name: Salva se mudou
+        run: |
+          git config user.name "Claude"
+          git config user.email "noreply@anthropic.com"
+          git add malhas scripts/malhas-log.txt
+          git diff --cached --quiet || (git commit -m "Atualiza malhas dos municípios (IBGE)" && git pull --rebase && git push)
