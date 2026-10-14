@@ -304,6 +304,7 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .grupo-pinos { background: none; border: 0; }
 .mais-opcoes { border: 0; background: none; color: var(--muted); font: 700 1.3rem/1 var(--f-body); padding: 4px 6px; cursor: pointer; border-radius: 8px; flex: none; }
 .mais-opcoes:active { background: var(--surface-2); }
+.pino.quero > div { transform: scale(.72); opacity: .55; }
 .grupo-pinos div.so-quero { background: var(--surface); color: var(--ink); border: 3px solid var(--want); }
 .grupo-pinos div { width: 36px; height: 36px; border-radius: 50%; background: var(--visit); color: #fff; font: 700 13px/36px var(--f-body); text-align: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
 .filtro-rot, .filtro-limpa { border: 1px solid transparent; background: none; color: var(--muted); font-size: .8rem; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 99px; }
@@ -1239,13 +1240,14 @@ function desenhaPinos() {
   for (const l of S.lugares) {
     if (!S.lr.has(l.id) || !tipos.includes(l.tipo)) continue;
     if (S.filtroRot && !rotulosDe(l.id).has(S.filtroRot)) continue;
+    const esteve = visitado(l.id, visP) || soLugar(l.id, soP);
     const m = L.marker([l.lat, l.lon], {
-      icon: L.divIcon({ className: `pino ${l.tipo}`, html: l.tipo === 'cidade'
+      icon: L.divIcon({ className: `pino ${l.tipo}${esteve ? '' : ' quero'}`, html: l.tipo === 'cidade'
         ? `<div class="band" style="--c:${corDoLugar(l.id)}">${bandeira(l.pais)}</div>`
         : l.tipo === 'unesco'
           ? `<div class="cat" style="--c:${corDoLugar(l.id)};background:${fundoCat(catDe(l.ref_externa))}">${ICONES.unesco}</div>`
           : `<div style="--c:${corDoLugar(l.id)}"${attrPorte(l)}>${iconeDe(l)}</div>`, iconSize: [0, 0] }),
-      title: l.nome, esteve: visitado(l.id, visP) || soLugar(l.id, soP),
+      title: l.nome, esteve, zIndexOffset: esteve ? 100 : 0,
     });
     m.on('click', () => resumoLugar(l, m));
     novos.push(m);
@@ -1422,6 +1424,8 @@ function renderLista() {
     const todos = S.lugares.filter(l => tipos.includes(l.tipo) && (!S.filtroRot || rotulosDe(l.id).has(S.filtroRot)) && (!f || norm(l.nome + ' ' + nomeEstado(l.estado) + ' ' + nomePais(l.pais)).includes(f)));
     const ls = ordena(todos.filter(visivel), aba, l => ({ nome: l.nome, lat: l.lat, lon: l.lon,
       tam: l.tipo === 'cidade' ? popCidade(l)?.pop : l.tipo === 'aeroporto' && rankingAero && l.ref_externa?.startsWith('iata:') ? paxDe(l.ref_externa.slice(5))?.pax : 0 }));
+    { const visL = idsVisita(), soL = idsSoLugar(), grupo = l => visitado(l.id, visL) || soLugar(l.id, soL) ? 0 : S.lr.has(l.id) ? 1 : 2;
+      ls.sort((a, b) => grupo(a) - grupo(b)); }
     html = avisoMapa(ls.length, todos.length) + ls.map(linhaLugar).join('');
     if (!ls.length && todos.length) html += '<div class="vazio-lista" style="padding:14px 20px"><b>Nenhum marcado nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     // itens da base ainda não marcados, na parte do mapa que está na tela
