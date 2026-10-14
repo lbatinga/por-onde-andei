@@ -5,7 +5,7 @@ on:
     - cron: '0 9 5 8 *'   # 5 de agosto, todo ano (depois da atualização das bases)
   push:
     branches: [main]
-    paths: ['scripts/ranking_aeroportos.py', 'scripts/museus.py', '.github/workflows/ranking-aeroportos.yml']
+    paths: ['scripts/ranking_aeroportos.py', 'scripts/regioes.py', 'scripts/museus.py', '.github/workflows/ranking-aeroportos.yml']
 permissions:
   contents: write
 jobs:

@@ -13,6 +13,8 @@ Mundo: top 50 do ranking do ACI World, como publicado na Wikipedia
 import csv, io, json, re, sys, datetime, collections
 import requests
 from bs4 import BeautifulSoup
+sys.path.insert(0, __import__("os").path.dirname(__file__))
+import regioes
 
 UA = {"User-Agent": "PorOndeAndei/1.0 (https://github.com/lbatinga/por-onde-andei)"}
 ANAC = "https://sistemas.anac.gov.br/dadosabertos/Voos%20e%20opera%C3%A7%C3%B5es%20a%C3%A9reas/Dados%20Estat%C3%ADsticos%20do%20Transporte%20A%C3%A9reo/Dados_Estatisticos.csv"
@@ -170,6 +172,55 @@ def main():
     }
     if ar:
         saida["argentina"] = ar
+    anterior = {}
+    try:
+        anterior = json.load(open("ranking-aeroportos.json", encoding="utf-8"))
+    except Exception:
+        pass
+    # continentes (Wikipedia, a partir do ACI regional e órgãos oficiais) e Europa por país (Eurostat)
+    oa = ourairports()
+    por_wiki, por_icao, por_iata = regioes.indice_ourairports(oa)
+    ano_max = datetime.date.today().year - 1
+    try:
+        sessao = requests.Session()
+        resolve = regioes.wikidata_resolver(sessao, UA)
+        cont = {}
+        for reg, pagina in regioes.WIKI_REGIOES.items():
+            html = sessao.get("https://en.wikipedia.org/api/rest_v1/page/html/" + pagina, headers=UA, timeout=120).text
+            ano, lista = regioes.parse_regiao(html, por_wiki, resolve=resolve, ano_max=ano_max)
+            print("Continente", reg, ano, len(lista), file=sys.stderr)
+            if ano and len(lista) >= 10:
+                cont[reg] = {"ano": ano, "fonte": "Wikipedia (ACI e órgãos oficiais)",
+                             "lista": [{"pos": i + 1, "iata": iata, "pais": (por_iata.get(iata) or {}).get("iso_country"),
+                                        "nome": nome, "pax": pax} for i, (_, iata, nome, pax) in enumerate(lista)]}
+        if len(cont) >= 4:
+            saida["continentes"] = cont
+        else:
+            raise RuntimeError(f"só {len(cont)} continentes")
+    except Exception as e:
+        print("Continentes falharam:", e, file=sys.stderr)
+        if anterior.get("continentes"):
+            saida["continentes"] = anterior["continentes"]
+    try:
+        txt = requests.get(regioes.EUROSTAT, headers=UA, timeout=180).text
+        ano_eu, lista_eu = regioes.parse_eurostat(txt, por_icao)
+        if not ano_eu:
+            raise RuntimeError("Eurostat sem ano completo")
+        paises = collections.defaultdict(list)
+        for icao, iata, pax in lista_eu:
+            pais = (por_iata.get(iata) or {}).get("iso_country")
+            if pais:
+                paises[pais].append({"iata": iata, "pax": pax})
+        for pais, l in paises.items():
+            l.sort(key=lambda x: -x["pax"])
+            for i, x in enumerate(l):
+                x["pos"] = i + 1
+        print("Eurostat ano", ano_eu, "aeroportos", len(lista_eu), "países", len(paises), file=sys.stderr)
+        saida["europa_paises"] = {"ano": ano_eu, "fonte": "Eurostat (avia_paoa)", "paises": paises}
+    except Exception as e:
+        print("Eurostat falhou:", e, file=sys.stderr)
+        if anterior.get("europa_paises"):
+            saida["europa_paises"] = anterior["europa_paises"]
     with open("ranking-aeroportos.json", "w", encoding="utf-8") as f:
         json.dump(saida, f, ensure_ascii=False, separators=(",", ":"))
     print("ok", len(br), len(lista_mundo), file=sys.stderr)

@@ -912,7 +912,20 @@ const basePorAba = aba => aba === 'unesco' ? (S.baseUnesco || []) : aba === 'tra
 // (grande a partir de 5 milhões de passageiros/ano, médio de 1 a 5 milhões, pequeno abaixo). Fora disso, sem porte.
 let rankingAero = null;
 const carregaRanking = () => rankingAero ? Promise.resolve(rankingAero) : fetch('ranking-aeroportos.json').then(r => r.json()).then(rk => {
-  rankingAero = { ...rk, posBR: new Map(rk.brasil.lista.map(x => [x.iata, x])), posAR: new Map((rk.argentina?.lista || []).filter(x => x.iata).map(x => [x.iata, x])), posMundo: new Map(rk.mundo.lista.map(x => [x.iata, x.pos])) };
+  // posição no país (fonte oficial: ANAC, ANAC Argentina, Eurostat) e no continente (listas regionais)
+  const posNac = new Map();
+  rk.brasil.lista.forEach(x => x.iata && posNac.set(x.iata, { pais: 'BR', pos: x.pos, pax: x.pax }));
+  (rk.argentina?.lista || []).forEach(x => x.iata && posNac.set(x.iata, { pais: 'AR', pos: x.pos, pax: x.pax }));
+  Object.entries(rk.europa_paises?.paises || {}).forEach(([pais, l]) => l.forEach(x => !posNac.has(x.iata) && posNac.set(x.iata, { pais, pos: x.pos, pax: x.pax })));
+  const posCont = new Map(), ORIENTE = new Set(['AE', 'QA', 'SA', 'KW', 'BH', 'OM', 'IL', 'JO', 'LB', 'IQ', 'IR', 'EG']);
+  Object.entries(rk.continentes || {}).forEach(([reg, c]) => c.lista.forEach(x => {
+    const atual = posCont.get(x.iata), novo = { reg, pos: x.pos, pax: x.pax, pais: x.pais };
+    if (!atual) return posCont.set(x.iata, novo);
+    // aeroporto em duas listas (Dubai na Ásia e no Oriente Médio, Cidade do México nas duas Américas): fica a mais natural
+    const prefere = r => r === 'oriente_medio' ? ORIENTE.has(x.pais) && x.pais !== 'EG' : r === 'europa' ? x.pais === 'TR' : r === 'america_latina' ? x.pais !== 'US' && x.pais !== 'CA' : false;
+    if (prefere(reg) && !prefere(atual.reg)) posCont.set(x.iata, novo);
+  }));
+  rankingAero = { ...rk, posBR: new Map(rk.brasil.lista.map(x => [x.iata, x])), posNac, posCont, posMundo: new Map(rk.mundo.lista.map(x => [x.iata, x.pos])) };
   return rankingAero;
 });
 const PORTES = { muito: 'Aeroporto muito grande', grande: 'Aeroporto grande', medio: 'Aeroporto médio', pequeno: 'Aeroporto pequeno' };
@@ -921,7 +934,7 @@ function porteAero(x) {
   const iata = ref.slice(5);
   // muito grande: top 50 do mundo ou 15 milhões+; grande: 5 milhões+; médio: 1 a 5 milhões; pequeno: abaixo
   if (rankingAero.posMundo.has(iata)) return 'muito';
-  const br = rankingAero.posBR.get(iata) || rankingAero.posAR.get(iata); if (!br) return null;
+  const br = rankingAero.posNac.get(iata) || rankingAero.posCont.get(iata); if (!br) return null;
   return br.pax >= 15e6 ? 'muito' : br.pax >= 5e6 ? 'grande' : br.pax >= 1e6 ? 'medio' : 'pequeno';
 }
 const attrPorte = x => { const p = porteAero(x); return p ? ` data-porte="${p}" title="${PORTES[p]}"` : ''; };
@@ -2351,10 +2364,10 @@ function abreEstatisticas() {
     // ranking dos seus aeroportos: Brasil (ANAC) e mundo (top 50 do ACI)
     carregaRanking().then(rk => {
       const box = m.querySelector('#st-aero'); if (!box) return;
-      const posBR = new Map(rk.brasil.lista.map(x => [x.iata, x.pos])), posAR = new Map((rk.argentina?.lista || []).filter(x => x.iata).map(x => [x.iata, x.pos])), posMundo = new Map(rk.mundo.lista.map(x => [x.iata, x.pos]));
+      const REG = { america_latina: 'Am. Latina', america_norte: 'Am. do Norte', europa: 'Europa', asia: 'Ásia', oriente_medio: 'Or. Médio', africa: 'África' };
       const meus = S.lugares.filter(l => l.tipo === 'aeroporto' && l.ref_externa?.startsWith('iata:') && (visitado(l.id, vis) || soLugar(l.id, so)))
-        .map(l => ({ l, iata: l.ref_externa.slice(5) })).map(x => ({ ...x, br: posBR.get(x.iata), ar: posAR.get(x.iata), mundo: posMundo.get(x.iata) }))
-        .sort((a, b) => (a.mundo || 999) - (b.mundo || 999) || (a.br || a.ar || 999) - (b.br || b.ar || 999) || a.l.nome.localeCompare(b.l.nome, 'pt-BR'));
+        .map(l => ({ l, iata: l.ref_externa.slice(5) })).map(x => ({ ...x, nac: rk.posNac.get(x.iata), cont: rk.posCont.get(x.iata), mundo: rk.posMundo.get(x.iata) })).map(x => ({ ...x, br: x.nac?.pais === 'BR' ? x.nac.pos : null }))
+        .sort((a, b) => (a.mundo || 999) - (b.mundo || 999) || (a.cont?.pos || 999) - (b.cont?.pos || 999) || (a.nac?.pos || 999) - (b.nac?.pos || 999) || a.l.nome.localeCompare(b.l.nome, 'pt-BR'));
       if (!meus.length) { box.innerHTML = '<p class="meta">Nenhum aeroporto marcado ainda.</p>'; return; }
       const curto = n => n.replace(/\s*\([A-Z]{3}\)\s*$/, '').replace(/^Aeroporto\s+(Internacional\s+)?((de|do|da|dos)\s+)?/i, '');
       const top = (lista, n) => lista.filter(x => x <= n).length;
@@ -2367,8 +2380,8 @@ function abreEstatisticas() {
         ${(() => { const c = { muito: 0, grande: 0, medio: 0, pequeno: 0 }; meus.forEach(x => { const p = porteAero(x.l); if (p) c[p]++; });
           return `<div class="portes">${Object.keys(c).filter(k => c[k]).map(k => `<span data-porte="${k}"><i></i>${c[k]} ${k === 'muito' ? (c[k] === 1 ? 'muito grande' : 'muito grandes') : k === 'medio' ? (c[k] === 1 ? 'médio' : 'médios') : k + (c[k] === 1 ? '' : 's')}</span>`).join('')}</div>`; })()}
         <div class="aero-lista">${meus.map(x => `<div class="aero-linha"><span class="sigla"${attrPorte(x.l)}>${esc(x.iata)}</span><span class="aero-nome">${esc(curto(x.l.nome))}</span>
-          <span class="aero-pos">${x.mundo ? `<span title="Posição no mundo">🌎 ${x.mundo}º</span>` : ''}${x.br ? `<span title="Posição no Brasil">🇧🇷 ${x.br}º</span>` : ''}${x.ar ? `<span title="Posição na Argentina">🇦🇷 ${x.ar}º</span>` : ''}${!x.mundo && !x.br && !x.ar ? '<span class="fora">fora do top 50</span>' : ''}</span></div>`).join('')}</div>
-        <p class="meta">🌎 top 50 do ACI ${rk.mundo.ano} · 🇧🇷 ANAC ${rk.brasil.ano}${rk.argentina ? ` · 🇦🇷 ANAC Argentina ${rk.argentina.ano}` : ''}</p>`;
+          <span class="aero-pos">${x.mundo ? `<span title="Posição no mundo">🌎 ${x.mundo}º</span>` : ''}${x.cont ? `<span title="Posição no continente">${REG[x.cont.reg] || ''} ${x.cont.pos}º</span>` : ''}${x.nac ? `<span title="Posição no país">${bandeira(x.nac.pais)} ${x.nac.pos}º</span>` : ''}${!x.mundo && !x.cont && !x.nac ? '<span class="fora">sem ranking</span>' : ''}</span></div>`).join('')}</div>
+        <p class="meta">🌎 mundo: top 50 do ACI ${rk.mundo.ano}${rk.continentes ? ` · continentes: listas regionais da Wikipedia (ACI e órgãos oficiais) ${Object.values(rk.continentes)[0].ano}` : ''} · país: ANAC ${rk.brasil.ano}${rk.argentina ? `, ANAC Argentina ${rk.argentina.ano}` : ''}${rk.europa_paises ? `, Eurostat ${rk.europa_paises.ano} (Europa)` : ''}</p>`;
     }).catch(() => { const box = m.querySelector('#st-aero'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar o ranking.</p>'; });
     carregaBase('museu').then(base => {
       const box = m.querySelector('#st-museus'); if (!box) return;
