@@ -1,13 +1,55 @@
-ANAC Atualizado em: 2026-10-13 ano 2025 aeroportos 162
-Wikipedia/ACI ano 2025 aeroportos 50
-ANAC Argentina 2026 incompleto: 8 meses
-ANAC Argentina ano 2025 aeroportos 49
-Continente america_latina 2025 30
-Continente america_norte 2025 50
-Continente europa 2025 99
-Continente asia 2025 35
-Continente oriente_medio 2025 27
-Continente africa 2025 26
-Eurostat ano 2025 aeroportos 411 países 40
-ok 162 50
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/urllib3/response.py", line 929, in _error_catcher
+    yield
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/urllib3/response.py", line 1067, in _raw_read
+    raise IncompleteRead(self._fp_bytes_read, self.length_remaining)
+urllib3.exceptions.IncompleteRead: IncompleteRead(52887295 bytes read, 307075794 more expected)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/requests/models.py", line 937, in generate
+    yield from self.raw.stream(chunk_size, decode_content=True)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/urllib3/response.py", line 1291, in stream
+    data = self.read(amt=amt, decode_content=decode_content)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/urllib3/response.py", line 1179, in read
+    data = self._raw_read(amt)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/urllib3/response.py", line 1045, in _raw_read
+    with self._error_catcher():
+         ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/urllib3/response.py", line 949, in _error_catcher
+    raise ProtocolError(arg, e) from e
+urllib3.exceptions.ProtocolError: ('Connection broken: IncompleteRead(52887295 bytes read, 307075794 more expected)', IncompleteRead(52887295 bytes read, 307075794 more expected))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/runner/work/por-onde-andei/por-onde-andei/scripts/ranking_aeroportos.py", line 251, in <module>
+    main()
+  File "/home/runner/work/por-onde-andei/por-onde-andei/scripts/ranking_aeroportos.py", line 149, in main
+    ano_br, atualizado, lista_br, nomes = brasil()
+                                          ^^^^^^^^
+  File "/home/runner/work/por-onde-andei/por-onde-andei/scripts/ranking_aeroportos.py", line 43, in brasil
+    for row in leitor:
+               ^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/csv.py", line 116, in __next__
+    row = next(self.reader)
+          ^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/por-onde-andei/por-onde-andei/scripts/ranking_aeroportos.py", line 40, in <genexpr>
+    linhas = (l.decode("utf-8-sig", "replace") for l in r.iter_lines())
+                                                        ^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/requests/models.py", line 1008, in iter_lines
+    for chunk in self.iter_content(
+                 ^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/requests/models.py", line 939, in generate
+    raise ChunkedEncodingError(e)
+requests.exceptions.ChunkedEncodingError: ('Connection broken: IncompleteRead(52887295 bytes read, 307075794 more expected)', IncompleteRead(52887295 bytes read, 307075794 more expected))
+FALHOU
 museus lidos 4149 abertos com coordenadas 3655
+IBGE ano 2026 municípios 5571
+GeoNames cidades 29442
+ok cidades
