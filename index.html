@@ -289,6 +289,70 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .selos-escala { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .78rem; color: var(--muted); margin-top: 14px; line-height: 1.5; }
 .selos-escala b { color: var(--ink); }
 #vo-corpo { min-width: 0; }
+
+/* passaporte de voos */
+.pp-h { display: flex; justify-content: space-between; align-items: baseline; margin-top: 16px !important; }
+.pp-h small { letter-spacing: 0; text-transform: none; font-weight: 500; }
+.pp-capa { background: radial-gradient(120% 90% at 85% 0%, #1d5b62 0%, #123a3f 55%, #0c2a2e 100%); color: #f2e8d5; border-radius: 16px; padding: 16px 16px 14px; position: relative; overflow: hidden; }
+.pp-capa::after { content: ""; position: absolute; inset: 0; background: repeating-radial-gradient(circle at 110% -10%, rgba(217,180,90,.07) 0 1px, transparent 1px 9px); pointer-events: none; }
+.pp-selo { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.pp-selo svg { width: 30px; height: 30px; color: #d9b45a; flex: none; }
+.pp-selo small { display: block; font-size: .62rem; letter-spacing: .22em; color: #d9b45a; font-weight: 700; }
+.pp-selo b { font-size: 1.05rem; letter-spacing: .06em; }
+.pp-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px; position: relative; z-index: 1; }
+.pp-nums b { display: block; font-size: 1.35rem; font-weight: 800; line-height: 1.05; color: #fff; font-variant-numeric: tabular-nums; }
+.pp-nums span { font-size: .7rem; color: #b9d3d0; }
+.pp-mrz { margin-top: 12px; font: 600 .6rem/1.35 ui-monospace, Menlo, monospace; letter-spacing: .1em; color: rgba(242,232,213,.5); word-break: break-all; position: relative; z-index: 1; }
+.pp-mapa { background: #e7eef0; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
+.pp-mapa svg { display: block; width: 100%; height: auto; }
+.pp-pais { fill: #f5f7f6; stroke: #cfd9d8; stroke-width: .6; } .pp-pais.vis { fill: #d3ebe6; stroke: #9fcfc6; }
+.pp-rota { fill: none; stroke: #e4572e; stroke-linecap: round; opacity: .85; }
+.pp-ap { fill: #fff; stroke: #123a3f; stroke-width: 2.2; }
+.pp-mapa text { font: 800 11px var(--f-body, system-ui); fill: #123a3f; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+.pp-pagina { background: #f6efe0; border-radius: 14px; padding: 12px 8px; border: 1px solid #e6dcc5; background-image: repeating-linear-gradient(0deg, rgba(160,130,60,.05) 0 1px, transparent 1px 22px); }
+.pp-carimbos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 4px; }
+.pp-carimbo { color: var(--c); opacity: .9; } .pp-carimbo svg { width: 100%; height: auto; display: block; }
+.pp-carimbo .c1 { fill: none; stroke: currentColor; stroke-width: 3; } .pp-carimbo .c2 { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-dasharray: 3 2.5; }
+.pp-carimbo .arco { font: 800 8.5px system-ui, sans-serif; letter-spacing: .12em; fill: currentColor; }
+.pp-carimbo .iata { font: 900 26px system-ui, sans-serif; fill: currentColor; letter-spacing: .04em; }
+.pp-carimbo .data { font: 700 8px ui-monospace, monospace; fill: currentColor; letter-spacing: .06em; }
+.pp-carimbo .vezes { font: 700 9px system-ui, sans-serif; fill: currentColor; }
+.pp-pagina p { margin: 6px 4px 0; font-size: .72rem; color: #8a7a55; text-align: center; }
+.pp-recs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pp-rec { border: 1px solid var(--line); border-radius: 12px; padding: 10px 11px; min-width: 0; }
+.pp-rec span { display: block; font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.pp-rec b { display: block; font-size: 1.05rem; font-weight: 800; margin: 3px 0 1px; }
+.pp-rec small { font-size: .72rem; color: var(--muted); }
+.pp-cia { display: flex; align-items: center; gap: 12px; border-radius: 12px; padding: 8px 12px 8px 0; margin-bottom: 8px; overflow: hidden; background: color-mix(in srgb, var(--c) 9%, var(--surface)); }
+.pp-cia .faixa { width: 7px; align-self: stretch; background: var(--c); border-radius: 0 4px 4px 0; flex: none; }
+.pp-cia .logo { background: #fff; border-radius: 8px; padding: 4px 6px; display: grid; place-items: center; flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.06); }
+.pp-cia .logo img { height: 26px; width: auto; max-width: 76px; display: block; }
+.pp-cia div { flex: 1; min-width: 0; } .pp-cia b { color: var(--c); font-size: 1rem; font-weight: 800; }
+.pp-cia small { display: block; font-size: .74rem; color: var(--muted); }
+.pp-cia .n { font-size: 1.4rem; font-weight: 800; color: var(--c); }
+.pp-aviao { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.pp-aviao .pp-topo { display: flex; align-items: baseline; gap: 8px; }
+.pp-aviao .pp-fab { font-size: .62rem; font-weight: 800; letter-spacing: .14em; color: var(--muted); }
+.pp-aviao .pp-topo b { font-size: 1.05rem; flex: 1; } .pp-aviao .n { font-weight: 800; color: var(--visit); }
+.pp-fotos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.pp-fotos figure { margin: 0; min-width: 0; }
+.pp-fotos .img { aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden; background: var(--surface-2); display: grid; place-items: center; color: var(--muted); }
+.pp-fotos .img.vazia svg { width: 28px; height: 28px; opacity: .5; }
+.pp-fotos .img a, .pp-fotos .img img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pp-fotos figcaption { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-width: 0; }
+.pp-fotos .reg { font: 700 .72rem ui-monospace, Menlo, monospace; padding: 2px 6px; border-radius: 6px; border: 1.5px solid var(--c); color: var(--c); letter-spacing: .04em; flex: none; }
+.pp-fotos .autor { font-size: .62rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-sem { display: block; margin-top: 6px; color: var(--muted); font-size: .72rem; }
+.pp-viag { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.pp-viag b { display: block; } .pp-viag small { color: var(--muted); font-size: .78rem; }
+.pp-viag .trechos { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.pp-viag .trechos span { font: 800 .76rem system-ui, sans-serif; background: var(--surface-2); padding: 2px 6px; border-radius: 6px; letter-spacing: .03em; }
+.pp-viag .trechos i { font-style: normal; color: var(--muted); font-size: .75rem; }
+.pp-ano { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 10px; margin-bottom: 8px; }
+.pp-ano span { font-weight: 800; } .pp-ano b { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.pp-ano .barra { height: 8px; background: var(--surface-2); border-radius: 9px; overflow: hidden; } .pp-ano .barra i { display: block; height: 100%; background: var(--visit); border-radius: 9px; }
+.pp-nota { margin-top: 14px !important; font-size: .7rem; }
+#vo-pass, [data-vo-sec] { min-width: 0; }
 .voo-card { display: flex; box-sizing: border-box; min-width: 0; max-width: 100%; overflow: hidden; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font: inherit; color: var(--ink); cursor: pointer; }
 .voo-rota { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; min-width: 96px; }
 .voo-rota b { font-size: 1.05rem; font-weight: 800; letter-spacing: .02em; }
@@ -2320,12 +2384,13 @@ function sugestoesViagem() {
   return [...porMes].filter(([, vs]) => vs.length >= 2).sort((a, b) => b[0].localeCompare(a[0]));
 }
 function abreViagens() {
+  carregaBase('aeroporto').catch(() => {});
   const porLugar = new Map(S.lugares.map(l => [l.id, l]));
   const desenhar = m => {
     const sug = sugestoesViagem();
     const vgs = [...(S.viagens || [])].sort((a, b) => inicioViagem(b).localeCompare(inicioViagem(a)));
     m.querySelector('#vg-corpo').innerHTML = `
-      ${vgs.length ? vgs.map(vg => { const ps = paradasDe(vg.id); const paises = new Set(ps.map(p => porLugar.get(p.lugar_id)?.pais).filter(Boolean)); return `<button class="viagem-card" data-vg="${vg.id}"><b>${esc(vg.nome)}</b><small>${esc(periodoViagem(vg))} · ${ps.length} ${ps.length === 1 ? 'parada' : 'paradas'} · ${fmtKm(kmViagem(vg.id))}${(() => { const t = [...kmPorTransporte([vg.id]).keys()].filter(k => TRANSPORTES[k]); return t.length ? ' ' + t.map(k => TRANSPORTES[k][0]).join('') : ''; })()} · ${[...paises].map(bandeira).join(' ')}</small></button>`; }).join('') : '<p>Nenhuma viagem ainda. Crie uma a partir das sugestões abaixo ou do zero.</p>'}
+      ${vgs.length ? vgs.map(vg => { const ps = paradasDe(vg.id); const paises = new Set(ps.map(p => porLugar.get(p.lugar_id)?.pais).filter(Boolean)); return `<button class="viagem-card" data-vg="${vg.id}"><b>${esc(vg.nome)}</b>${(() => { const vv = (S.voos || []).filter(v => v.viagem_id === vg.id); return vv.length ? `<small>✈ ${vv.length} ${vv.length === 1 ? 'voo' : 'voos'} · ${fmtKm(vv.reduce((t, v) => t + kmVoo(v), 0))} · ${fmtHoras(vv.reduce((t, v) => t + minVoo(v), 0))} no ar</small>` : ''; })()}<small>${esc(periodoViagem(vg))} · ${ps.length} ${ps.length === 1 ? 'parada' : 'paradas'} · ${fmtKm(kmViagem(vg.id))}${(() => { const t = [...kmPorTransporte([vg.id]).keys()].filter(k => TRANSPORTES[k]); return t.length ? ' ' + t.map(k => TRANSPORTES[k][0]).join('') : ''; })()} · ${[...paises].map(bandeira).join(' ')}</small></button>`; }).join('') : '<p>Nenhuma viagem ainda. Crie uma a partir das sugestões abaixo ou do zero.</p>'}
       ${sug.length ? `<h4>Sugestões</h4><p class="meta">Meses com vários lugares visitados que ainda não estão numa viagem.</p>${sug.map(([ym, vs]) => `<div class="sugestao"><span><b>${esc(nomeMes(ym))}</b> · ${vs.length} lugares<small>${esc(vs.slice(0, 5).map(v => porLugar.get(v.lugar_id)?.nome).filter(Boolean).join(', '))}${vs.length > 5 ? '…' : ''}</small></span><button class="btn" data-sug="${ym}">Criar</button></div>`).join('')}` : ''}`;
     m.querySelectorAll('[data-vg]').forEach(b => b.onclick = () => editaViagem(S.viagens.find(x => x.id === b.dataset.vg), null, () => desenhar(m)));
     m.querySelectorAll('[data-sug]').forEach(b => b.onclick = () => editaViagem(null, b.dataset.sug, () => desenhar(m)));
@@ -2675,7 +2740,7 @@ function abreEstatisticas() {
     </div>
     <p class="meta">A área soma cada estado ou província onde você esteve, inteiro: passar por Manaus conta o Amazonas todo.</p>
     <div class="abas-band st-abas" role="tablist">
-      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="pais">País</button><button role="tab" data-st="aero">Aeroportos</button>${(S.voos || []).length ? '<button role="tab" data-st="voos">Voos</button>' : ''}<button role="tab" data-st="selos">Selos</button>${(S.viagens || []).length >= 3 ? '<button role="tab" data-st="viagens">Viagens</button>' : ''}
+      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="pais">País</button><button role="tab" data-st="aero">Aeroportos</button><button role="tab" data-st="selos">Selos</button>${(S.viagens || []).length >= 3 ? '<button role="tab" data-st="viagens">Viagens</button>' : ''}
     </div>
     <section data-st-sec="geral">
       <h4>Por continente</h4>
@@ -2696,7 +2761,6 @@ function abreEstatisticas() {
       <div class="st-paises">${paisesStats.map(p => `<button data-st-pais="${p}">${bandeira(p)} ${esc(nomePais(p))}</button>`).join('')}</div>
       <div id="st-pais"></div>
     </section>
-    <section data-st-sec="voos" hidden><div id="st-voos"><p class="meta">Carregando…</p></div></section>
     <section data-st-sec="selos" hidden><div id="st-selos"><p class="meta">Carregando…</p></div></section>
     <section data-st-sec="aero" hidden><div id="st-aero"><p class="meta">Carregando…</p></div></section>
     <section data-st-sec="viagens" hidden>
@@ -2716,7 +2780,7 @@ function abreEstatisticas() {
       try { localStorage.setItem('poa-st-aba', aba); } catch {}
     };
     m.querySelectorAll('[data-st]').forEach(b => b.onclick = () => mostraAba(b.dataset.st));
-    mostraAba((() => { try { let a = localStorage.getItem('poa-st-aba') || 'geral'; if (a === 'brasil') a = 'pais'; return m.querySelector(`[data-st="${a}"]`) ? a : 'geral'; } catch { return 'geral'; } })());
+    mostraAba((() => { try { let a = localStorage.getItem('poa-st-aba') || 'geral'; if (a === 'brasil') a = 'pais'; if (a === 'voos') a = 'geral'; return m.querySelector(`[data-st="${a}"]`) ? a : 'geral'; } catch { return 'geral'; } })());
     const sel = m.querySelector('#st-casa');
     if (sel) sel.onchange = async () => { await salvaCasa(sel.value); fechar(); abreEstatisticas(); };
     // aba País: o que você conhece de cada país (no Brasil, mais os dados do IBGE)
@@ -2766,7 +2830,6 @@ function abreEstatisticas() {
     };
     m.querySelectorAll('[data-st-pais]').forEach(b => b.onclick = () => desenhaPais(b.dataset.stPais));
     if (paisesStats.length) desenhaPais((() => { try { const p = localStorage.getItem('poa-st-pais'); return paisesStats.includes(p) ? p : paisesStats[0]; } catch { return paisesStats[0]; } })());
-    htmlPassaporte().then(h => { const box = m.querySelector('#st-voos'); if (box) box.innerHTML = h; }).catch(() => {});
     calculaSelos().then(lista => {
       const box = m.querySelector('#st-selos'); if (!box) return;
       const desenha = todos => {
@@ -3112,14 +3175,23 @@ function abreVoos() {
         : '<p class="meta">Nenhum voo ainda. Toque em “Novo voo”: com o número e a data, o app busca o resto.</p>';
       const inc = incompletos();
       if (inc.length) m.querySelector('#vo-corpo').insertAdjacentHTML('afterbegin', `<div class="sugestao"><span><b>${inc.length} ${inc.length === 1 ? 'voo recente sem' : 'voos recentes sem'} avião ou matrícula</b><small>A busca alcança cerca de 1 ano para trás.</small></span><button class="btn" id="vo-completar">Completar</button></div>`);
-      const bc = m.querySelector('#vo-completar'); if (bc) bc.onclick = () => completaVoos(bc, () => desenhar(m));
-      m.querySelectorAll('[data-voo]').forEach(b => b.onclick = () => editaVoo(S.voos.find(x => x.id === b.dataset.voo), () => desenhar(m)));
+      const bc = m.querySelector('#vo-completar'); if (bc) bc.onclick = () => completaVoos(bc, () => m._depois ? m._depois() : desenhar(m));
+      m.querySelectorAll('[data-voo]').forEach(b => b.onclick = () => editaVoo(S.voos.find(x => x.id === b.dataset.voo), () => m._depois ? m._depois() : desenhar(m)));
     };
-    abreModal(`<h3>Voos</h3><div id="vo-corpo"></div><p class="meta">Busca de voos: dados da <a href="https://aerodatabox.com" target="_blank" rel="noopener">AeroDataBox</a>.</p>
+    abreModal(`<h3>Voos</h3>
+      <div class="abas-band st-abas" role="tablist"><button role="tab" data-vo="pass">Passaporte</button><button role="tab" data-vo="lista">Lista</button></div>
+      <section data-vo-sec="pass"><div id="vo-pass"><p class="meta">Carregando…</p></div></section>
+      <section data-vo-sec="lista" hidden><div id="vo-corpo"></div><p class="meta">Busca de voos: dados da <a href="https://aerodatabox.com" target="_blank" rel="noopener">AeroDataBox</a>.</p></section>
       <div class="acoes"><button class="btn" id="vo-fechar">Fechar</button><button class="btn principal" id="vo-novo">Novo voo</button></div>`, (m, fechar) => {
+      const passaporte = () => htmlPassaporte().then(h => { const box = m.querySelector('#vo-pass'); if (box) { box.innerHTML = h; carregaFotos(box); } }).catch(() => {});
+      const aba = a => { m.querySelectorAll('[data-vo]').forEach(b => b.setAttribute('aria-selected', b.dataset.vo === a)); m.querySelectorAll('[data-vo-sec]').forEach(x => x.hidden = x.dataset.voSec !== a); try { localStorage.setItem('poa-vo-aba', a); } catch {} };
+      m.querySelectorAll('[data-vo]').forEach(b => b.onclick = () => aba(b.dataset.vo));
+      aba((() => { try { return (S.voos || []).length ? localStorage.getItem('poa-vo-aba') || 'pass' : 'lista'; } catch { return 'pass'; } })());
       m.querySelector('#vo-fechar').onclick = fechar;
-      m.querySelector('#vo-novo').onclick = () => editaVoo(null, () => desenhar(m));
-      desenhar(m);
+      const depois = () => { desenhar(m); passaporte(); };
+      m.querySelector('#vo-novo').onclick = () => editaVoo(null, depois);
+      desenhar(m); passaporte();
+      m._depois = depois;
     });
   });
 }
@@ -3286,42 +3358,126 @@ function desenhaRotas() {
   rotas.forEach((n, k) => { const [x, y] = k.split('-').map(aeroPorIata); if (x && y) L.polyline(arco(x, y), { color: cor, weight: Math.min(1.5 + n * 0.8, 5), opacity: 0.75, interactive: false }).addTo(camadaRotas); });
   if (!mapa.hasLayer(camadaRotas)) camadaRotas.addTo(mapa);
 }
-// estatísticas dos voos (o "passaporte")
+// ---- Passaporte de voos: capa, rotas, carimbos, recordes, companhias, aviões, viagens e anos
+// cores que lembram cada companhia (o logo vem de um banco público; sem ele, fica a faixa colorida)
+const COR_CIA = { G3: '#ff6a13', AD: '#0b3d91', JJ: '#c8102e', LA: '#1b0088', '4M': '#1b0088', AR: '#0f6db3', TP: '#d71920', CM: '#003a70', AV: '#da291c', H2: '#ff4f00', JA: '#1e2a78', FO: '#ffc600', AA: '#0078d2', UA: '#005daa', DL: '#c8102e', AF: '#002157', KL: '#00a1de', IB: '#d7192d', UX: '#00539f', LH: '#05164d', BA: '#075aaa', EK: '#d71921', QR: '#5c0632', TK: '#c70a0c', '2Z': '#0f4c81' };
+const corCia = v => COR_CIA[v.cia] || '#5b6f71';
+// TAM voou com o código JJ, que hoje é da LATAM: para não mostrar o logo errado, a TAM fica só com o nome
+const logoCia = v => v.cia && !/^tam\b/i.test(v.cia_nome || '') ? `https://pics.avs.io/200/80/${encodeURIComponent(v.cia)}.png` : null;
+const CORES_PAIS = ['#1f7a4d', '#2b7bb9', '#8e44ad', '#c0392b', '#d35400', '#16a085', '#7d5a2b', '#2c3e50', '#b8860b', '#6d4c9f'];
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const dataCurta = d => `${+d.slice(8)} ${MESES_CURTOS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`;
+const pl = (n, um, varios) => `${n.toLocaleString('pt-BR')} ${n === 1 ? um : varios}`;
+// fotos: Planespotters pela matrícula (foto do avião exato); sem ela, a foto do modelo na Wikipédia
+const fotosAviao = new Map();
+function fotoMatricula(reg) {
+  if (fotosAviao.has(reg)) return fotosAviao.get(reg);
+  const chave = 'poa-foto-' + reg;
+  try { const c = JSON.parse(localStorage.getItem(chave) || 'null'); if (c && Date.now() - c.em < 864e5) { const p = Promise.resolve(c.f); fotosAviao.set(reg, p); return p; } } catch {}
+  const p = fetch('https://api.planespotters.net/pub/photos/reg/' + encodeURIComponent(reg)).then(r => r.ok ? r.json() : null)
+    .then(j => { const f = j?.photos?.[0]; const out = f ? { src: f.thumbnail_large?.src || f.thumbnail?.src, link: f.link, autor: f.photographer } : null;
+      try { localStorage.setItem(chave, JSON.stringify({ em: Date.now(), f: out })); } catch {} return out; }).catch(() => null);
+  fotosAviao.set(reg, p); return p;
+}
+function fotoModelo(modelo) {
+  const k = 'm:' + modelo; if (fotosAviao.has(k)) return fotosAviao.get(k);
+  const titulo = modelo.replace(/\s+/g, '_').replace(/^Embraer_(\d)/, 'Embraer_E$1');
+  const p = fetch('https://pt.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(titulo)).then(r => r.ok ? r.json() : null)
+    .then(j => j?.thumbnail?.source ? { src: j.thumbnail.source, link: j.content_urls?.desktop?.page, autor: 'Wikipédia' } : null).catch(() => null);
+  fotosAviao.set(k, p); return p;
+}
+function mapaRotasSvg(vs) {
+  const aps = [...new Set(vs.flatMap(v => [v.origem, v.destino]))].map(aeroPorIata).filter(Boolean);
+  if (!aps.length) return '';
+  let x0 = Math.min(...aps.map(a => a.lon)), x1 = Math.max(...aps.map(a => a.lon)), y0 = Math.min(...aps.map(a => a.lat)), y1 = Math.max(...aps.map(a => a.lat));
+  const k = Math.cos((y0 + y1) / 2 * Math.PI / 180); // largura real do grau de longitude
+  let w = (x1 - x0) * k, h = y1 - y0; const m = Math.max(w, h) * 0.18 + 2; x0 -= m / k; x1 += m / k; y0 -= m; y1 += m;
+  w = (x1 - x0) * k; h = y1 - y0; if (w < h) { const d = (h - w) / 2 / k; x0 -= d; x1 += d; w = h; } else { const d = (w - h) / 2; y0 -= d; y1 += d; h = w; }
+  const W = 380, H = Math.round(W * Math.min(h / w, 1.1)), px = lon => ((lon - x0) * k / w * W), py = lat => ((y1 - lat) / h * H);
+  const visto = new Set(aps.map(a => a.pais));
+  const paises = S.paises.filter(p => p.bbox[2] > x0 && p.bbox[0] < x1 && p.bbox[3] > y0 && p.bbox[1] < y1).map(p => `<path class="pp-pais${visto.has(p.id) ? ' vis' : ''}" d="${p.polys.map(poly => poly.map(anel => 'M' + anel.filter((_, i) => i % 2 === 0 || anel.length < 40).map(([x, y]) => px(x).toFixed(1) + ',' + py(y).toFixed(1)).join('L') + 'Z').join('')).join('')}"/>`).join('');
+  const rotas = new Map(); vs.forEach(v => { const r = [v.origem, v.destino].sort().join('-'); rotas.set(r, (rotas.get(r) || 0) + 1); });
+  const arcos = [...rotas].map(([r, n]) => { const [a, b] = r.split('-').map(aeroPorIata); if (!a || !b) return '';
+    const xa = px(a.lon), ya = py(a.lat), xb = px(b.lon), yb = py(b.lat), cx = (xa + xb) / 2 - (yb - ya) * 0.18, cy = (ya + yb) / 2 + (xb - xa) * 0.18;
+    return `<path class="pp-rota" style="stroke-width:${Math.min(1.6 + n * 0.9, 6)}" d="M${xa.toFixed(1)},${ya.toFixed(1)}Q${cx.toFixed(1)},${cy.toFixed(1)} ${xb.toFixed(1)},${yb.toFixed(1)}"/>`; }).join('');
+  const pontos = aps.map(a => { const x = px(a.lon), y = py(a.lat), esq = x > W * 0.75; return `<g transform="translate(${x.toFixed(1)},${y.toFixed(1)})"><circle r="4.5" class="pp-ap"/><text x="${esq ? -8 : 8}" y="4" text-anchor="${esq ? 'end' : 'start'}">${esc(a.iata)}</text></g>`; }).join('');
+  return `<div class="pp-mapa"><svg viewBox="0 0 ${W} ${H}">${paises}${arcos}${pontos}</svg></div>`;
+}
 async function htmlPassaporte() {
   await carregaBase('aeroporto').catch(() => {});
   const cias = await carregaCias().catch(() => ({}));
-  const vs = S.voos || []; if (!vs.length) return '<p class="meta">Nenhum voo registrado. Cadastre em Menu › Voos.</p>';
-  const km = vs.reduce((t, v) => t + kmVoo(v), 0), min = vs.reduce((t, v) => t + minVoo(v), 0);
-  const conta = f => { const m = new Map(); vs.forEach(v => { const k = f(v); if (k) m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'pt-BR')); };
-  const lista = (pares, vazio) => pares.length ? `<div class="tabela">${pares.map(([k, n]) => `<span>${esc(k)}</span><b>${n} ${n === 1 ? 'voo' : 'voos'}</b>`).join('')}</div>` : `<p class="meta">${vazio}</p>`;
-  const porKm = [...vs].filter(kmVoo).sort((a, b) => kmVoo(b) - kmVoo(a));
-  const aeros = new Map(); vs.forEach(v => [v.origem, v.destino].forEach(i => aeros.set(i, (aeros.get(i) || 0) + 1)));
-  const topAero = [...aeros].sort((a, b) => b[1] - a[1])[0];
-  const rotas = conta(v => [v.origem, v.destino].sort().join(' ⇄ ')), anos = conta(v => v.data.slice(0, 4)).sort((a, b) => b[0].localeCompare(a[0]));
-  const regs = new Map(); vs.filter(v => v.matricula).forEach(v => { const r = regs.get(v.matricula) || { n: 0, modelo: v.modelo, cia: nomeCia(v, cias) }; r.n++; regs.set(v.matricula, r); });
-  const semModelo = vs.filter(v => !v.modelo).length, estimado = vs.some(v => !v.minutos);
-  const paises = new Set(vs.flatMap(v => [aeroPorIata(v.origem)?.pais, aeroPorIata(v.destino)?.pais]).filter(Boolean));
-  return `<div class="destaques">
-      <div><b>${vs.length}</b><span>${vs.length === 1 ? 'voo' : 'voos'}</span></div>
-      <div><b>${fmtKm(km)}</b><span>voados</span></div>
-      <div><b>${fmtHoras(min)}</b><span>no ar${estimado ? ' (aprox.)' : ''}</span></div>
-    </div>
-    <div class="tabela">
-      <span>Voltas na Terra</span><b>${(km / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b>
-      <span>Aeroportos</span><b>${aeros.size}</b>
-      <span>Países</span><b>${paises.size}</b>
-      ${topAero ? `<span>Aeroporto mais usado</span><b>${esc(topAero[0])} · ${topAero[1]}×</b>` : ''}
-      ${porKm.length ? `<span>Voo mais longo</span><b>${esc(porKm[0].origem)}→${esc(porKm[0].destino)} · ${fmtKm(kmVoo(porKm[0]))}</b>
-      <span>Voo mais curto</span><b>${esc(porKm.at(-1).origem)}→${esc(porKm.at(-1).destino)} · ${fmtKm(kmVoo(porKm.at(-1)))}</b>` : ''}
-    </div>
-    <h4>Companhias</h4>${lista(conta(v => nomeCia(v, cias)), 'Sem companhia registrada.')}
-    <h4>Aviões</h4>${lista(conta(v => v.modelo), 'Nenhum modelo registrado ainda.')}
-    ${conta(v => fabricante(v.modelo)).length > 1 ? `<h4>Fabricantes</h4>${lista(conta(v => fabricante(v.modelo)), '')}` : ''}
-    ${semModelo && semModelo < vs.length ? `<p class="meta">${semModelo} ${semModelo === 1 ? 'voo sem avião registrado' : 'voos sem avião registrado'}.</p>` : ''}
-    <h4>Matrículas</h4>${regs.size ? `<div class="tabela">${[...regs].sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0])).map(([r, x]) => `<span><b>${esc(r)}</b> · ${esc([x.modelo, x.cia].filter(Boolean).join(' · '))}</span><b>${x.n}×</b>`).join('')}</div>` : '<p class="meta">Nenhuma matrícula registrada ainda.</p>'}
-    <h4>Rotas</h4>${lista(rotas.slice(0, 10), '')}
-    <h4>Por ano</h4><div class="tabela">${anos.map(([a, n]) => `<span>${a}</span><b>${n} ${n === 1 ? 'voo' : 'voos'} · ${fmtKm(vs.filter(v => v.data.startsWith(a)).reduce((t, v) => t + kmVoo(v), 0))}</b>`).join('')}</div>
-    <p class="meta">Distância em linha reta pela curva da Terra (círculo máximo).${estimado ? ' Tempo aproximado quando o voo não tem horário registrado: distância a 800 km/h mais 30 minutos.' : ''}</p>`;
+  const vs = [...(S.voos || [])].sort((a, b) => a.data.localeCompare(b.data) || (a.partida || '').localeCompare(b.partida || ''));
+  if (!vs.length) return '<p class="meta">Nenhum voo ainda. Cadastre na aba Lista: com o número e a data, o app busca o resto.</p>';
+  const km = vs.reduce((t, v) => t + kmVoo(v), 0), min = vs.reduce((t, v) => t + minVoo(v), 0), estimado = vs.some(v => !v.minutos);
+  // aeroportos na ordem em que apareceram
+  const primeira = new Map(), uso = new Map();
+  vs.forEach(v => [v.origem, v.destino].forEach(i => { if (!primeira.has(i)) primeira.set(i, v.data); uso.set(i, (uso.get(i) || 0) + 1); }));
+  const paisCasa = casa()?.pais || 'BR', paisesOrd = [...new Set([paisCasa, ...[...primeira.keys()].map(i => aeroPorIata(i)?.pais).filter(Boolean)])];
+  const corPais = cc => CORES_PAIS[paisesOrd.indexOf(cc) % CORES_PAIS.length];
+  const paises = new Set([...primeira.keys()].map(i => aeroPorIata(i)?.pais).filter(Boolean));
+  const ciasDist = new Set(vs.map(v => v.cia_nome || v.cia).filter(Boolean)), avioes = new Set(vs.map(v => v.matricula).filter(Boolean));
+  const capa = `<div class="pp-capa"><div class="pp-selo">${ICONES.aeroporto}<div><small>PASSAPORTE DE VOOS</small><b>POR ONDE ANDEI</b></div></div>
+    <div class="pp-nums"><div><b>${vs.length}</b><span>${vs.length === 1 ? 'voo' : 'voos'}</span></div><div><b>${km.toLocaleString('pt-BR')}</b><span>km voados</span></div><div><b>${fmtHoras(min)}</b><span>no ar${estimado ? ' (aprox.)' : ''}</span></div>
+    <div><b>${primeira.size}</b><span>aeroportos</span></div><div><b>${paises.size}</b><span>${paises.size === 1 ? 'país' : 'países'}</span></div><div><b>${(km / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b><span>voltas na Terra</span></div></div>
+    <div class="pp-mrz">P&lt;${esc(paisCasa === 'BR' ? 'BRA' : paisCasa)}&lt;&lt;VOOS&lt;&lt;${esc([...primeira.keys()].slice(0, 8).join('<'))}${'&lt;'.repeat(4)}<br>${vs.length}&lt;&lt;${ciasDist.size}CIAS&lt;&lt;${avioes.size}AVIOES&lt;&lt;${vs[0].data.slice(0, 4)}&lt;${vs.at(-1).data.slice(0, 4)}${'&lt;'.repeat(6)}</div></div>`;
+  const giros = [-6, 4, -3, 7, -8, 3, 5, -4];
+  const carimbos = [...primeira.keys()].map((i, n) => { const a = aeroPorIata(i), cid = (a ? cidadeAero(i) : '') || i, pais = a ? (nomePais(a.pais) || a.pais) : '';
+    return `<div class="pp-carimbo" style="--c:${corPais(a?.pais)};transform:rotate(${giros[n % giros.length]}deg)" title="${esc(a?.nome || i)}"><svg viewBox="0 0 120 120">
+      <circle cx="60" cy="60" r="56" class="c1"/><circle cx="60" cy="60" r="49" class="c2"/>
+      <path id="pc-t${n}" d="M60,60 m-41,0 a41,41 0 1,1 82,0" fill="none"/><path id="pc-b${n}" d="M60,60 m-44,0 a44,44 0 1,0 88,0" fill="none"/>
+      <text class="arco" style="letter-spacing:${cid.length > 12 ? '.02em' : cid.length > 9 ? '.06em' : '.14em'}"><textPath href="#pc-t${n}" startOffset="50%" text-anchor="middle">${esc(cid.toUpperCase().slice(0, 18))}</textPath></text>
+      <text class="arco"><textPath href="#pc-b${n}" startOffset="50%" text-anchor="middle">${esc(pais.toUpperCase().slice(0, 18))}</textPath></text>
+      <text x="60" y="58" text-anchor="middle" class="iata">${esc(i)}</text><text x="60" y="71" text-anchor="middle" class="data">${esc(dataCurta(primeira.get(i)).toUpperCase())}</text>
+      <text x="60" y="84" text-anchor="middle" class="vezes">${uso.get(i)}× ✈</text></svg></div>`; }).join('');
+  const comKm = vs.filter(kmVoo), longo = [...comKm].sort((a, b) => kmVoo(b) - kmVoo(a))[0], curto = [...comKm].sort((a, b) => kmVoo(a) - kmVoo(b))[0];
+  const cedo = vs.filter(v => v.partida).sort((a, b) => a.partida.localeCompare(b.partida))[0];
+  const rotas = new Map(); vs.forEach(v => { const r = [v.origem, v.destino].sort().join(' ⇄ '); rotas.set(r, (rotas.get(r) || 0) + 1); });
+  const fav = [...rotas].sort((a, b) => b[1] - a[1])[0];
+  const rec = (t, b, s) => `<div class="pp-rec"><span>${t}</span><b>${b}</b><small>${s}</small></div>`;
+  const recordes = `<div class="pp-recs">${longo ? rec('Mais longo', `${esc(longo.origem)} → ${esc(longo.destino)}`, `${fmtKm(kmVoo(longo))} · ${fmtHoras(minVoo(longo))}${longo.numero ? ' · ' + esc(longo.numero) : ''}`) : ''}
+    ${curto && curto !== longo ? rec('Mais curto', `${esc(curto.origem)} → ${esc(curto.destino)}`, `${fmtKm(kmVoo(curto))} · ${fmtHoras(minVoo(curto))}${curto.numero ? ' · ' + esc(curto.numero) : ''}`) : ''}
+    ${cedo ? rec('Mais cedo', esc(cedo.partida), `${esc([cedo.numero, `${cedo.origem} → ${cedo.destino}`, dataCurta(cedo.data)].filter(Boolean).join(' · '))}`) : ''}
+    ${fav && fav[1] > 1 ? rec('Rota favorita', esc(fav[0]), `${fav[1]} voos`) : ''}</div>`;
+  const porCia = new Map(); vs.forEach(v => { const k = nomeCia(v, cias); if (!porCia.has(k)) porCia.set(k, []); porCia.get(k).push(v); });
+  const companhias = [...porCia].sort((a, b) => b[1].length - a[1].length).map(([nome, l]) => { const v = l[0], cor = corCia(v), logo = logoCia(v);
+    return `<div class="pp-cia" style="--c:${cor}"><span class="faixa"></span>${logo ? `<span class="logo"><img src="${logo}" alt="" loading="lazy" onerror="this.parentElement.remove()"></span>` : ''}<div><b>${esc(nome)}</b><small>${esc([v.cia, pl(l.length, 'voo', 'voos'), fmtKm(l.reduce((t, x) => t + kmVoo(x), 0))].filter(Boolean).join(' · '))}</small></div><span class="n">${l.length}</span></div>`; }).join('');
+  const porModelo = new Map(); vs.forEach(v => { const k = v.modelo || 'Avião não informado'; if (!porModelo.has(k)) porModelo.set(k, []); porModelo.get(k).push(v); });
+  let nFoto = 0;
+  const aviaoHtml = [...porModelo].sort((a, b) => (a[0] === 'Avião não informado') - (b[0] === 'Avião não informado') || b[1].length - a[1].length).map(([mod, l]) => {
+    const fab = mod === 'Avião não informado' ? '' : fabricante(mod), curtoMod = fab && mod.startsWith(fab + ' ') ? mod.slice(fab.length + 1) : mod;
+    const regs = []; l.forEach(v => { if (v.matricula && !regs.some(r => r.reg === v.matricula)) regs.push({ reg: v.matricula, v }); });
+    const semReg = l.filter(v => !v.matricula).length;
+    return `<div class="pp-aviao"><div class="pp-topo">${fab ? `<span class="pp-fab">${esc(fab.toUpperCase())}</span>` : ''}<b>${esc(curtoMod)}</b><span class="n">${l.length}×</span></div>
+      ${regs.length ? `<div class="pp-fotos">${regs.map(r => `<figure data-reg="${esc(r.reg)}" data-modelo="${esc(mod)}" id="pp-f${nFoto++}"><div class="img" style="--c:${corCia(r.v)}"></div><figcaption><span class="reg" style="--c:${corCia(r.v)}">${esc(r.reg)}</span><small class="autor"></small></figcaption></figure>`).join('')}</div>` : mod !== 'Avião não informado' ? `<div class="pp-fotos"><figure data-modelo="${esc(mod)}" id="pp-f${nFoto++}"><div class="img"></div><figcaption><small class="autor"></small></figcaption></figure></div>` : ''}
+      ${semReg && regs.length ? `<small class="pp-sem">${pl(semReg, 'voo sem matrícula', 'voos sem matrícula')}</small>` : ''}</div>`; }).join('');
+  const porViagem = new Map(); vs.forEach(v => { const vg = v.viagem_id && (S.viagens || []).find(x => x.id === v.viagem_id); const k = vg ? vg.id : ''; if (!porViagem.has(k)) porViagem.set(k, { vg, l: [] }); porViagem.get(k).l.push(v); });
+  const viagens = [...porViagem.values()].sort((a, b) => !a.vg - !b.vg || b.l[0].data.localeCompare(a.l[0].data)).map(({ vg, l }) => {
+    const cadeia = [l[0].origem]; l.forEach(v => { if (cadeia.at(-1) !== v.origem) cadeia.push('·', v.origem); cadeia.push(v.destino); });
+    return `<div class="pp-viag"><b>${esc(vg ? vg.nome : 'Sem viagem ligada')}</b><small>${pl(l.length, 'voo', 'voos')} · ${fmtKm(l.reduce((t, v) => t + kmVoo(v), 0))} · ${fmtHoras(l.reduce((t, v) => t + minVoo(v), 0))} no ar</small>
+      <div class="trechos">${cadeia.map((c, i) => c === '·' ? '<i>·</i>' : `${i && cadeia[i - 1] !== '·' ? '<i>→</i>' : ''}<span>${esc(c)}</span>`).join('')}</div></div>`; }).join('');
+  const anos = new Map(); vs.forEach(v => { const a = v.data.slice(0, 4); anos.set(a, [...(anos.get(a) || []), v]); });
+  const maxAno = Math.max(...[...anos.values()].map(l => l.length));
+  const linha = [...anos].sort((a, b) => b[0].localeCompare(a[0])).map(([a, l]) => `<div class="pp-ano"><span>${a}</span><div class="barra"><i style="width:${l.length / maxAno * 100}%"></i></div><b>${pl(l.length, 'voo', 'voos')} · ${fmtKm(l.reduce((t, v) => t + kmVoo(v), 0))}</b></div>`).join('');
+  return `${capa}
+    <h4 class="pp-h">Rotas <small>mais grossa = mais vezes</small></h4>${mapaRotasSvg(vs)}
+    <h4 class="pp-h">Carimbos <small>um por aeroporto · 1ª vez</small></h4><div class="pp-pagina"><div class="pp-carimbos">${carimbos}</div><p>Cor do carimbo = país · ✈ = voos por ali</p></div>
+    <h4 class="pp-h">Recordes</h4>${recordes}
+    <h4 class="pp-h">Companhias</h4>${companhias}
+    <h4 class="pp-h">Aviões <small>foto do avião em que você voou</small></h4>${aviaoHtml}
+    <h4 class="pp-h">Por viagem</h4>${viagens}
+    <h4 class="pp-h">Por ano</h4>${linha}
+    <p class="meta pp-nota">Distâncias em linha reta pela curva da Terra.${estimado ? ' Sem horário registrado, o tempo é estimado pela distância.' : ''} Fotos: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a> (pela matrícula) ou Wikipédia (pelo modelo), com o crédito de cada foto. Logos das companhias: Travelpayouts. Busca de voos: AeroDataBox.</p>`;
+}
+// depois de desenhar: carrega as fotos (uma por matrícula)
+function carregaFotos(caixa) {
+  caixa.querySelectorAll('figure[data-modelo]').forEach(async fig => {
+    const f = (fig.dataset.reg && await fotoMatricula(fig.dataset.reg)) || await fotoModelo(fig.dataset.modelo);
+    if (!fig.isConnected) return;
+    const img = fig.querySelector('.img');
+    if (!f?.src) { img.classList.add('vazia'); img.innerHTML = ICONES.aeroporto; return; }
+    img.innerHTML = `<a href="${esc(f.link || '#')}" target="_blank" rel="noopener"><img src="${esc(f.src)}" alt="${esc(fig.dataset.reg || fig.dataset.modelo)}" loading="lazy"></a>`;
+    fig.querySelector('.autor').textContent = f.autor ? '© ' + f.autor : '';
+  });
 }
 
 /* ================= Menu ================= */
