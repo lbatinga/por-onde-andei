@@ -331,7 +331,10 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .pp-cia small { display: block; font-size: .74rem; color: var(--muted); }
 .pp-cia .n { font-size: 1.4rem; font-weight: 800; color: var(--c); }
 .pp-aviao { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
-.pp-aviao .pp-topo { display: flex; align-items: baseline; gap: 8px; }
+.pp-aviao .pp-topo { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; min-height: 28px; }
+.pp-aviao .pp-topo::-webkit-details-marker { display: none; }
+.pp-aviao .seta { width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg) translateY(-2px); transition: transform .15s; margin-left: 4px; }
+.pp-aviao[open] .seta { transform: rotate(-135deg) translateY(-2px); }
 .pp-aviao .pp-fab { font-size: .62rem; font-weight: 800; letter-spacing: .14em; color: var(--muted); }
 .pp-aviao .pp-topo b { font-size: 1.05rem; flex: 1; } .pp-aviao .n { font-weight: 800; color: var(--visit); }
 .pp-fotos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
@@ -3448,9 +3451,9 @@ async function htmlPassaporte() {
     const fab = mod === 'Avião não informado' ? '' : fabricante(mod), curtoMod = fab && mod.startsWith(fab + ' ') ? mod.slice(fab.length + 1) : mod;
     const regs = []; l.forEach(v => { if (v.matricula && !regs.some(r => r.reg === v.matricula)) regs.push({ reg: v.matricula, v }); });
     const semReg = l.filter(v => !v.matricula).length;
-    return `<div class="pp-aviao"><div class="pp-topo">${fab ? `<span class="pp-fab">${esc(fab.toUpperCase())}</span>` : ''}<b>${esc(curtoMod)}</b><span class="n">${l.length}×</span></div>
+    return `<details class="pp-aviao" data-mod="${esc(mod)}"><summary class="pp-topo">${fab ? `<span class="pp-fab">${esc(fab.toUpperCase())}</span>` : ''}<b>${esc(curtoMod)}</b><span class="n">${l.length}×</span><span class="seta" aria-hidden="true"></span></summary>
       ${regs.length ? `<div class="pp-fotos">${regs.map(r => `<figure data-reg="${esc(r.reg)}" data-modelo="${esc(mod)}" id="pp-f${nFoto++}"><div class="img" style="--c:${corCia(r.v)}"></div><figcaption><span class="reg" style="--c:${corCia(r.v)}">${esc(r.reg)}</span><small class="autor"></small></figcaption></figure>`).join('')}</div>` : mod !== 'Avião não informado' ? `<div class="pp-fotos"><figure data-modelo="${esc(mod)}" id="pp-f${nFoto++}"><div class="img"></div><figcaption><small class="autor"></small></figcaption></figure></div>` : ''}
-      ${semReg && regs.length ? `<small class="pp-sem">${pl(semReg, 'voo sem matrícula', 'voos sem matrícula')}</small>` : ''}</div>`; }).join('');
+      ${semReg && regs.length ? `<small class="pp-sem">${pl(semReg, 'voo sem matrícula', 'voos sem matrícula')}</small>` : ''}</details>`; }).join('');
   const porViagem = new Map(); vs.forEach(v => { const vg = v.viagem_id && (S.viagens || []).find(x => x.id === v.viagem_id); const k = vg ? vg.id : ''; if (!porViagem.has(k)) porViagem.set(k, { vg, l: [] }); porViagem.get(k).l.push(v); });
   const viagens = [...porViagem.values()].sort((a, b) => !a.vg - !b.vg || b.l[0].data.localeCompare(a.l[0].data)).map(({ vg, l }) => {
     const cadeia = [l[0].origem]; l.forEach(v => { if (cadeia.at(-1) !== v.origem) cadeia.push('·', v.origem); cadeia.push(v.destino); });
@@ -3463,14 +3466,27 @@ async function htmlPassaporte() {
     <h4 class="pp-h">Rotas <small>mais grossa = mais vezes</small></h4>${mapaRotasSvg(vs)}
     <h4 class="pp-h">Carimbos <small>um por aeroporto · 1ª vez</small></h4><div class="pp-pagina"><div class="pp-carimbos">${carimbos}</div><p>Cor do carimbo = país · ✈ = voos por ali</p></div>
     <h4 class="pp-h">Recordes</h4>${recordes}
-    <h4 class="pp-h">Companhias</h4>${companhias}
-    <h4 class="pp-h">Aviões <small>foto do avião em que você voou</small></h4>${aviaoHtml}
-    <h4 class="pp-h">Por viagem</h4>${viagens}
     <h4 class="pp-h">Por ano</h4>${linha}
+    <h4 class="pp-h">Companhias</h4>${companhias}
+    <h4 class="pp-h">Aviões <small>toque para ver as fotos</small></h4>${aviaoHtml}
+    <h4 class="pp-h">Por viagem</h4>${viagens}
     <p class="meta pp-nota">Distâncias em linha reta pela curva da Terra.${estimado ? ' Sem horário registrado, o tempo é estimado pela distância.' : ''} Fotos: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a> (pela matrícula) ou Wikipédia (pelo modelo), com o crédito de cada foto. Logos das companhias: Travelpayouts. Busca de voos: AeroDataBox.</p>`;
 }
 // depois de desenhar: carrega as fotos (uma por matrícula)
 function carregaFotos(caixa) {
+  let abertos = []; try { abertos = JSON.parse(localStorage.getItem('poa-pp-abertos') || '[]'); } catch {}
+  caixa.querySelectorAll('details.pp-aviao').forEach(d => {
+    const carrega = () => { if (d.open && !d.dataset.ok) { d.dataset.ok = 1; carregaFotosDe(d); } };
+    if (abertos.includes(d.dataset.mod)) d.open = true;
+    d.addEventListener('toggle', () => {
+      carrega();
+      const ab = [...caixa.querySelectorAll('details.pp-aviao[open]')].map(x => x.dataset.mod);
+      try { localStorage.setItem('poa-pp-abertos', JSON.stringify(ab)); } catch {}
+    });
+    carrega();
+  });
+}
+function carregaFotosDe(caixa) {
   caixa.querySelectorAll('figure[data-modelo]').forEach(async fig => {
     const f = (fig.dataset.reg && await fotoMatricula(fig.dataset.reg)) || await fotoModelo(fig.dataset.modelo);
     if (!fig.isConnected) return;
