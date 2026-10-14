@@ -101,7 +101,12 @@ def municipios():
             saida.append([int(cod), m["nome"], uf, lat, lon])
             novos.append(m["nome"])
     # trava de segurança: mudança grande demais é sinal de dado errado, não de realidade
-    if len(renomeados) > 20 or len(novos) > 20:
+    # renomeações já conferidas e aprovadas (scripts/municipios-aprovados.json) não contam na trava
+    try:
+        aprovados = {tuple(x) for x in json.load(open("scripts/municipios-aprovados.json", encoding="utf-8"))}
+    except FileNotFoundError:
+        aprovados = set()
+    if len([r for r in renomeados if tuple(r) not in aprovados]) > 20 or len(novos) > 20:
         raise SystemExit(f"mudança suspeita: {len(renomeados)} renomeados, {len(novos)} novos — nada gravado. Exemplos: {renomeados[:40]} {novos[:20]}")
     vistos = {str(x[0]) for x in saida}
     saida += [list(x) for c, x in atual.items() if c not in vistos]   # nunca apaga município
