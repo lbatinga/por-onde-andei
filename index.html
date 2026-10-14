@@ -116,7 +116,8 @@ body.publico #btn-menu { display: grid; }
 
 .painel-topo { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
 .painel-topo h2 { font: 700 1rem var(--f-display); margin: 0; flex: 1; min-width: 0; }
-.painel-topo input { width: 46%; max-width: 200px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-size: .9rem; }
+#ordem { border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); border-radius: 999px; padding: 6px 8px; font: inherit; font-size: .85rem; max-width: 130px; }
+.painel-topo input { width: 38%; max-width: 180px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-size: .9rem; }
 .cab-rotulos { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 12px; justify-content: flex-start; min-width: 0; font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--surface-2); }
 .cab-rotulos span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .cab-rotulos { gap: 4px 6px !important; }
@@ -301,6 +302,7 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .menu-link { display: block; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); color: var(--accent); font-weight: 700; text-decoration: none; }
 .publico .busca, .publico .fab { display: none !important; }
 .grupo-pinos { background: none; border: 0; }
+.grupo-pinos div.so-quero { background: var(--surface); color: var(--ink); border: 3px solid var(--want); }
 .grupo-pinos div { width: 36px; height: 36px; border-radius: 50%; background: var(--visit); color: #fff; font: 700 13px/36px var(--f-body); text-align: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
 .filtro-rot, .filtro-limpa { border: 1px solid transparent; background: none; color: var(--muted); font-size: .8rem; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 99px; }
 .filtro-rot[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; background: var(--surface); }
@@ -465,6 +467,7 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
       <div class="alca" id="alca" aria-label="Arrastar a lista"><span></span></div>
       <div class="painel-topo">
         <h2 id="painel-titulo">Cidades</h2>
+        <select id="ordem" aria-label="Ordem da lista"></select>
         <input id="filtro" type="search" placeholder="Filtrar lista">
       </div>
       <div class="cab-rotulos" id="cab-rotulos"></div>
@@ -1120,11 +1123,19 @@ function criaBotaoLocalizar() {
   });
   return new C();
 }
+// altura da lista que flutua sobre o mapa (só no celular)
+const alturaLista = () => { const p = $('#painel'); return p && innerWidth < 900 ? p.getBoundingClientRect().height : 0; };
+// centraliza um ponto no pedaço do mapa que está à vista (acima da lista), não na tela toda
+function centraVisivel(ll, zoom) {
+  const z = zoom ?? mapa.getZoom(), h = alturaLista();
+  const p = mapa.project(L.latLng(ll), z).add([0, h / 2]);
+  mapa.setView(mapa.unproject(p, z), z);
+}
 // Botão "ver tudo": enquadra todos os seus lugares da lista aberta (fica logo abaixo do "onde estou")
 function verTudo() {
   const ls = camadaPinos.getLayers();
   // no celular a lista cobre a parte de baixo do mapa: enquadra só na parte visível
-  const painel = $('#painel'), sobre = painel && innerWidth < 900 ? painel.getBoundingClientRect().height : 0;
+  const sobre = alturaLista();
   if (ls.length) mapa.fitBounds(L.featureGroup(ls).getBounds().pad(0.1), { paddingTopLeft: [20, 20], paddingBottomRight: [20, sobre + 20] }); else mapa.setView([0, 0], 2);
 }
 function criaBotaoVerTudo() {
@@ -1151,7 +1162,7 @@ function irParaMim(div) {
       L.circle(ll, { radius: Math.min(p.coords.accuracy, 2000), color: '#1a73e8', weight: 1, fillOpacity: 0.12, interactive: false }),
       L.circleMarker(ll, { radius: 7, color: '#fff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false }),
     ]).addTo(mapa);
-    mapa.setView(ll, Math.max(mapa.getZoom(), 13));
+    centraVisivel(ll, Math.max(mapa.getZoom(), 13));
   }, err => {
     div.classList.remove('buscando');
     toast(err.code === 1 ? 'Libere a localização para o app nas permissões do navegador' : 'Não consegui pegar sua localização agora', 4000);
@@ -1169,7 +1180,9 @@ function iniciaMapa() {
   // pinos agrupados de longe (bolinha com o número), separados quando aproxima
   camadaPinos = (L.markerClusterGroup ? L.markerClusterGroup({
     maxClusterRadius: 42, disableClusteringAtZoom: 11, showCoverageOnHover: false, spiderfyOnMaxZoom: true,
-    iconCreateFunction: c => L.divIcon({ html: `<div>${c.getChildCount()}</div>`, className: 'grupo-pinos', iconSize: [36, 36] }),
+    // a bolinha conta só onde você esteve; grupo só de "quero ir" fica vazado, na cor do quero ir
+    iconCreateFunction: c => { const ms = c.getAllChildMarkers(), v = ms.filter(m => m.options.esteve).length;
+      return L.divIcon({ html: v ? `<div>${v}</div>` : `<div class="so-quero">${ms.length}</div>`, className: 'grupo-pinos', iconSize: [36, 36] }); },
   }) : L.layerGroup()).addTo(mapa);
   L.control.localizar = criaBotaoLocalizar(); L.control.localizar.addTo(mapa);
   criaBotaoVerTudo().addTo(mapa);
@@ -1213,7 +1226,7 @@ const tiposDaAba = aba => ({ cidade: ['cidade'], unesco: ['unesco'], transporte:
 const abaDeRegiao = () => S.aba === 'paises' || S.aba === 'estados';
 function desenhaPinos() {
   camadaPinos.clearLayers();
-  const tipos = tiposDaAba(S.aba), novos = [];
+  const tipos = tiposDaAba(S.aba), novos = [], visP = idsVisita(), soP = idsSoLugar();
   for (const l of S.lugares) {
     if (!S.lr.has(l.id) || !tipos.includes(l.tipo)) continue;
     if (S.filtroRot && !rotulosDe(l.id).has(S.filtroRot)) continue;
@@ -1223,7 +1236,7 @@ function desenhaPinos() {
         : l.tipo === 'unesco'
           ? `<div class="cat" style="--c:${corDoLugar(l.id)};background:${fundoCat(catDe(l.ref_externa))}">${ICONES.unesco}</div>`
           : `<div style="--c:${corDoLugar(l.id)}"${attrPorte(l)}>${iconeDe(l)}</div>`, iconSize: [0, 0] }),
-      title: l.nome,
+      title: l.nome, esteve: visitado(l.id, visP) || soLugar(l.id, soP),
     });
     m.on('click', () => resumoLugar(l, m));
     novos.push(m);
@@ -1300,8 +1313,39 @@ function avisoMapa(n, total) {
 }
 // colunas do resumo de países/estados (mesma ordem da legenda)
 const COLS_RESUMO = [['cidade', 'Cidades'], ['unesco', 'UNESCO'], ['aeroporto', 'Aeroportos'], ['porto', 'Portos'], ['atracao', 'Atrações e parques'], ['museu', 'Museus']];
+// Ordem da lista: A–Z, mais perto (de onde você está; sem localização, da sua casa) ou maior
+// (população nas cidades, movimento nos aeroportos, área em países e estados). Lembra por aba.
+const NOME_TAMANHO = { cidade: 'Mais populosa', transporte: 'Mais movimentado', paises: 'Maior área', estados: 'Maior área' };
+function ordemDaAba(aba) { try { return JSON.parse(localStorage.getItem('poa-ordem') || '{}')[aba] || 'nome'; } catch { return 'nome'; } }
+function guardaOrdem(aba, o) { try { const m = JSON.parse(localStorage.getItem('poa-ordem') || '{}'); m[aba] = o; localStorage.setItem('poa-ordem', JSON.stringify(m)); } catch {} }
+function pontoRef() {
+  if (S.minhaPos) return S.minhaPos;
+  const c = casa(); if (c) return [c.lat, c.lon];
+  const m = mapa.getCenter(); return [m.lat, m.lng];
+}
+function pedeMinhaPos() {
+  if (S.minhaPos || S.pedindoPos || !navigator.geolocation) return;
+  S.pedindoPos = true;
+  navigator.geolocation.getCurrentPosition(p => { S.minhaPos = [p.coords.latitude, p.coords.longitude]; S.pedindoPos = false; renderLista(); },
+    () => { S.pedindoPos = false; toast('Sem sua localização: a distância é contada a partir da sua casa', 3500); }, { timeout: 10000, maximumAge: 300000 });
+}
+// info(x) -> { nome, lat, lon, tam }
+function ordena(lista, aba, info) {
+  const o = ordemDaAba(aba), ref = o === 'perto' ? pontoRef() : null;
+  const dados = lista.map(x => { const i = info(x); return { x, i, d: ref && i.lat != null ? distKm(ref[0], ref[1], i.lat, i.lon) : Infinity }; });
+  dados.sort((a, b) => (o === 'perto' ? a.d - b.d : o === 'tamanho' ? (b.i.tam || -1) - (a.i.tam || -1) : 0) || a.i.nome.localeCompare(b.i.nome, 'pt-BR'));
+  return dados.map(d => d.x);
+}
+const centroBox = b => b ? { lat: (b[1] + b[3]) / 2, lon: (b[0] + b[2]) / 2 } : { lat: null, lon: null };
+function montaSeletorOrdem(aba) {
+  const sel = $('#ordem'); if (!sel) return;
+  const opcoes = [['nome', 'A–Z'], ['perto', 'Mais perto'], ...(NOME_TAMANHO[aba] ? [['tamanho', NOME_TAMANHO[aba]]] : [])];
+  let atual = ordemDaAba(aba); if (!opcoes.some(([k]) => k === atual)) atual = 'nome';
+  sel.innerHTML = opcoes.map(([k, t]) => `<option value="${k}" ${k === atual ? 'selected' : ''}>${t}</option>`).join('');
+}
 function renderLista() {
   const f = norm(S.filtro), aba = S.aba, visivel = noMapa();
+  montaSeletorOrdem(aba);
   $('#cab-rotulos').hidden = false;
   if (S.filtroRot && !S.rotulos.some(r => r.id === S.filtroRot)) S.filtroRot = null;
   $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? COLS_RESUMO.map(([t, nome]) => `<span class="leg">${ICONES[t]}${nome}</span>`).join('') : rotulosDaAba(aba).map(r => `<button class="filtro-rot" data-filtro-rot="${r.id}" aria-pressed="${S.filtroRot === r.id}" title="Mostrar só ${esc(r.nome)}"><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</button>`).join('')
@@ -1328,14 +1372,17 @@ function renderLista() {
       for (const id of cont.keys()) { const p = S.paisPorId.get(id); const ct = CONTINENTES[p?.continente] || 'Outros'; if (!porCont.has(ct)) porCont.set(ct, []); porCont.get(ct).push(id); }
       const totais = new Map(); S.paises.forEach(p => { const ct = CONTINENTES[p.continente] || 'Outros'; totais.set(ct, (totais.get(ct) || 0) + 1); });
       for (const [ct, ids] of [...porCont].sort()) {
-        const linhas = ids.filter(id => norm(nomePais(id)).includes(f)).sort((a, b) => nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
+        const linhas = ordena(ids.filter(id => norm(nomePais(id)).includes(f)), 'paises', id => { const p = S.paisPorId.get(id); return { nome: nomePais(id), ...centroBox(p?.maior), tam: p ? areaFeicao(p) : 0 }; });
         if (!linhas.length) continue;
         html += `<div class="grupo"><span>${esc(ct)}</span><span>${ids.length} de ${totais.get(ct)}</span></div>`;
         html += linhas.map(id => `<div class="item"><span class="bandeira">${bandeira(id)}</span><button class="txt" data-zoom-pais="${esc(id)}"><b>${esc(nomePais(id))}</b>${resumoHtml(id)}</button></div>`).join('');
       }
     } else {
       const ids = [...cont.keys()].filter(id => norm(nomeEstado(id)).includes(f))
-        .sort((a, b) => nomePais(S.estadoPorId.get(a)?.pais).localeCompare(nomePais(S.estadoPorId.get(b)?.pais), 'pt-BR') || nomeEstado(a).localeCompare(nomeEstado(b), 'pt-BR'));
+        .sort((a, b) => nomePais(S.estadoPorId.get(a)?.pais).localeCompare(nomePais(S.estadoPorId.get(b)?.pais), 'pt-BR'));
+      // dentro de cada país, a ordem escolhida (os países continuam agrupados)
+      const porPaisOrd = new Map(); ids.forEach(id => { const p = S.estadoPorId.get(id)?.pais; if (!porPaisOrd.has(p)) porPaisOrd.set(p, []); porPaisOrd.get(p).push(id); });
+      ids.splice(0, ids.length, ...[...porPaisOrd.values()].flatMap(g => ordena(g, 'estados', id => { const e = S.estadoPorId.get(id); return { nome: nomeEstado(id), ...centroBox(e?.bbox), tam: e ? areaFeicao(e) : 0 }; })));
       let ult = null;
       for (const id of ids) {
         const p = S.estadoPorId.get(id)?.pais;
@@ -1363,7 +1410,8 @@ function renderLista() {
   } else {
     const tipos = aba === 'transporte' ? ['aeroporto', 'porto'] : [aba];
     const todos = S.lugares.filter(l => tipos.includes(l.tipo) && (!S.filtroRot || rotulosDe(l.id).has(S.filtroRot)) && (!f || norm(l.nome + ' ' + nomeEstado(l.estado) + ' ' + nomePais(l.pais)).includes(f)));
-    const ls = todos.filter(visivel).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    const ls = ordena(todos.filter(visivel), aba, l => ({ nome: l.nome, lat: l.lat, lon: l.lon,
+      tam: l.tipo === 'cidade' ? popCidade(l)?.pop : l.tipo === 'aeroporto' && rankingAero && l.ref_externa?.startsWith('iata:') ? paxDe(l.ref_externa.slice(5))?.pax : 0 }));
     html = avisoMapa(ls.length, todos.length) + ls.map(linhaLugar).join('');
     if (!ls.length && todos.length) html += '<div class="vazio-lista" style="padding:14px 20px"><b>Nenhum marcado nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     // itens da base ainda não marcados, na parte do mapa que está na tela
@@ -1640,7 +1688,7 @@ async function excluiLugar(id) {
 }
 function abreLugar(id) {
   const l = S.lugares.find(x => x.id === id); if (!l) return;
-  mapa.setView([l.lat, l.lon], Math.max(mapa.getZoom(), 9));
+  centraVisivel([l.lat, l.lon], Math.max(mapa.getZoom(), 9));
   if (S.publico) {
     const rots = S.rotulos.filter(r => rotulosDe(id).has(r.id));
     return abreModal(`<h3>${esc(l.nome)}</h3><p>${esc([TIPOS[l.tipo].um, nomeEstado(l.estado), nomePais(l.pais)].filter(Boolean).join(' · '))}</p>
@@ -1663,8 +1711,10 @@ function abreLugar(id) {
 // leva o mapa até o lugar sem perder o zoom que você deixou: se o ponto já está na tela, nem mexe;
 // se está longe, vai até ele e só aproxima se o zoom atual estiver afastado demais
 function vaiPara(lat, lon, zoomMin) {
-  if (mapa.getBounds().pad(-0.1).contains([lat, lon])) return;
-  mapa.setView([lat, lon], Math.max(mapa.getZoom(), zoomMin));
+  // já está à vista (fora da parte coberta pela lista)? então nem mexe
+  const pt = mapa.latLngToContainerPoint([lat, lon]), tam = mapa.getSize(), m = 30;
+  if (pt.x > m && pt.x < tam.x - m && pt.y > m && pt.y < tam.y - alturaLista() - m) return;
+  centraVisivel([lat, lon], Math.max(mapa.getZoom(), zoomMin));
 }
 function abreMunicipio(m) {
   $('#resultados').hidden = true; $('#busca').value = '';
@@ -2935,6 +2985,8 @@ function montaApp() {
     const ze = e.target.closest('[data-zoom-estado]'); if (ze) { const p = S.estadoPorId.get(ze.dataset.zoomEstado); if (p) mapa.fitBounds([[p.bbox[1], p.bbox[0]], [p.bbox[3], p.bbox[2]]]); }
   });
   $('#filtro').addEventListener('input', e => { S.filtro = e.target.value; renderLista(); });
+  $('#ordem').addEventListener('change', e => { guardaOrdem(S.aba, e.target.value); if (e.target.value === 'perto') pedeMinhaPos(); renderLista(); });
+  if (Object.values((() => { try { return JSON.parse(localStorage.getItem('poa-ordem') || '{}'); } catch { return {}; } })()).includes('perto')) pedeMinhaPos();
   $('#cab-rotulos').addEventListener('click', e => {
     const b = e.target.closest('[data-filtro-rot]'); if (!b) return;
     S.filtroRot = b.dataset.filtroRot && S.filtroRot !== b.dataset.filtroRot ? b.dataset.filtroRot : null;
