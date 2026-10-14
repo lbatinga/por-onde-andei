@@ -9,6 +9,9 @@ Continente asia 2025 35
 Continente oriente_medio 2025 27
 Continente africa 2025 26
 CAA ano 2025 aeroportos 50
+/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/openpyxl/worksheet/header_footer.py:48: UserWarning: Cannot parse header or footer so it will be ignored
+  warn("""Cannot parse header or footer so it will be ignored""")
+FAA ano 2025 aeroportos 516
 Eurostat ano 2025 aeroportos 411 países 40
 ok 162 50
 museus lidos 4149 abertos com coordenadas 3655
