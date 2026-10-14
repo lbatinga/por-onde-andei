@@ -288,6 +288,19 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .sl .prog i { display: block; height: 100%; background: var(--visit); border-radius: 9px; }
 .selos-escala { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .78rem; color: var(--muted); margin-top: 14px; line-height: 1.5; }
 .selos-escala b { color: var(--ink); }
+#vo-corpo { min-width: 0; }
+.voo-card { display: flex; box-sizing: border-box; min-width: 0; max-width: 100%; overflow: hidden; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font: inherit; color: var(--ink); cursor: pointer; }
+.voo-rota { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; min-width: 96px; }
+.voo-rota b { font-size: 1.05rem; font-weight: 800; letter-spacing: .02em; }
+.voo-rota i { font-style: normal; color: var(--muted); font-size: .8rem; }
+.voo-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.voo-info b { font-size: .88rem; }
+.voo-info small { color: var(--muted); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voo-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; align-items: start; }
+.voo-form > .campo:nth-child(1), .voo-form > .campo:nth-child(2), .voo-form > #vf-trechos, .voo-form > .campo:has(#vf-mod), .voo-form > .campo:has(#vf-vg), .voo-form > .campo:has(#vf-notas) { grid-column: 1 / -1; }
+.voo-busca { display: flex; gap: 8px; }
+.voo-busca input { flex: 1; min-width: 0; }
+.campo small.meta { display: block; margin-top: 2px; min-height: 1em; }
 .aero-lista { display: grid; gap: 0; margin: 4px 0 6px; }
 .aero-linha { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .aero-linha:last-child { border-bottom: 0; }
@@ -661,13 +674,13 @@ function salvaCopia() {
   if (S.publico || !S.user) return;
   try {
     localStorage.setItem(CHAVE_COPIA, JSON.stringify({ user: { id: S.user.id, email: S.user.email }, em: Date.now(), rotulos: S.rotulos, lugares: S.lugares,
-      lr: [...S.lr].map(([l, m]) => [l, [...m.keys()]]), visitas: S.visitas || [], viagens: S.viagens || [], paradas: S.paradas || [], config: S.config || {} }));
+      lr: [...S.lr].map(([l, m]) => [l, [...m.keys()]]), visitas: S.visitas || [], viagens: S.viagens || [], paradas: S.paradas || [], voos: S.voos || [], config: S.config || {} }));
   } catch {}
 }
 let tCopia; const agendaCopia = () => { clearTimeout(tCopia); tCopia = setTimeout(salvaCopia, 1500); };
 function leCopia() { try { return JSON.parse(localStorage.getItem(CHAVE_COPIA)); } catch { return null; } }
 function aplicaCopia(c) {
-  S.rotulos = c.rotulos || []; S.lugares = (c.lugares || []).map(l => l.tipo === 'porto' ? { ...l, tipo: 'atracao' } : l); S.visitas = c.visitas || []; S.viagens = c.viagens || []; S.paradas = c.paradas || []; S.config = c.config || {};
+  S.rotulos = c.rotulos || []; S.lugares = (c.lugares || []).map(l => l.tipo === 'porto' ? { ...l, tipo: 'atracao' } : l); S.visitas = c.visitas || []; S.viagens = c.viagens || []; S.paradas = c.paradas || []; S.voos = c.voos || []; S.config = c.config || {};
   S.lr = new Map((c.lr || []).map(([l, rs]) => [l, new Map(rs.map(r => [r, null]))]));
 }
 let fila = (() => { try { return JSON.parse(localStorage.getItem(CHAVE_FILA)) || []; } catch { return []; } })();
@@ -736,6 +749,7 @@ async function carregaDados() {
   S.visitas = await todos(() => supa.from('viagem_visitas').select('id,lugar_id,data,precisao,nota,viagem_id').order('data', { ascending: false })).catch(() => []);
   S.viagens = await todos(() => supa.from('viagem_viagens').select('*')).catch(() => []);
   S.paradas = await todos(() => supa.from('viagem_paradas').select('id,viagem_id,lugar_id,ordem,transporte')).catch(() => []);
+  S.voos = await todos(() => supa.from('viagem_voos').select('*').order('data')).catch(() => []);
   S.config = (await supa.from('viagem_config').select('casa_lugar_id').maybeSingle().then(r => r.data).catch(() => null)) || {};
   S.lr = new Map();
   for (const x of lr) { if (!S.lr.has(x.lugar_id)) S.lr.set(x.lugar_id, new Map()); S.lr.get(x.lugar_id).set(x.rotulo_id, x.data); }
@@ -1349,7 +1363,7 @@ function atualizaTudo() {
   agendaCopia();
   agendaSelos();
   const c = calcula();
-  if (camadaPaises) { ajustaCamadaEstados(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); desenhaPinos(); desenhaMunicipios(); }
+  if (camadaPaises) { ajustaCamadaEstados(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); desenhaPinos(); desenhaMunicipios(); desenhaRotas(); }
   document.querySelectorAll('.rot-mapa div[data-pais]').forEach(d => d.parentElement.classList.toggle('visitado', paisesVis.has(d.dataset.pais)));
   const totalPaises = S.paises.length;
   // núcleo do app em destaque; UNESCO, atrações e museus ficam juntos no último botão
@@ -2550,6 +2564,14 @@ async function calculaSelos() {
   }
   lista.push(selo('cidades', 'Marcos', ICONES.cidade, 'Cidades', c.cidade, null, MARCOS.cidades));
   lista.push(selo('aeroportos', 'Marcos', ICONES.aeroporto, 'Aeroportos', c.aeroporto, null, MARCOS.aeroportos));
+  if ((S.voos || []).length) {
+    await carregaBase('aeroporto').catch(() => {});
+    const vs = S.voos;
+    lista.push(selo('voos', 'Voos', ICONES.aeroporto, 'Voos', vs.length, null, [5, 10, 25, 50, 100]));
+    lista.push(selo('km-voados', 'Voos', GLOBO, 'Km voados', vs.reduce((t, v) => t + kmVoo(v), 0), null, [10000, 25000, 50000, 100000, 250000]));
+    lista.push(selo('companhias', 'Voos', ICONES.aeroporto, 'Companhias', new Set(vs.map(v => v.cia || v.cia_nome).filter(Boolean)).size, null, [2, 3, 5, 10, 20]));
+    lista.push(selo('modelos', 'Voos', ICONES.aeroporto, 'Modelos de avião', new Set(vs.map(v => v.modelo).filter(Boolean)).size, null, [2, 3, 5, 10, 20]));
+  }
   try {
     await (cidadesVis.some(l => l.pais && l.pais !== 'BR') ? carregaMundo() : carregaPop());
     lista.push(selo('metropoles', 'Marcos', METROPOLE, 'Metrópoles (1 mi+)', cidadesVis.filter(l => porteCidade(l) === 'muito').length, null, MARCOS.metropoles));
@@ -2653,7 +2675,7 @@ function abreEstatisticas() {
     </div>
     <p class="meta">A área soma cada estado ou província onde você esteve, inteiro: passar por Manaus conta o Amazonas todo.</p>
     <div class="abas-band st-abas" role="tablist">
-      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="pais">País</button><button role="tab" data-st="aero">Aeroportos</button><button role="tab" data-st="selos">Selos</button>${(S.viagens || []).length >= 3 ? '<button role="tab" data-st="viagens">Viagens</button>' : ''}
+      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="pais">País</button><button role="tab" data-st="aero">Aeroportos</button>${(S.voos || []).length ? '<button role="tab" data-st="voos">Voos</button>' : ''}<button role="tab" data-st="selos">Selos</button>${(S.viagens || []).length >= 3 ? '<button role="tab" data-st="viagens">Viagens</button>' : ''}
     </div>
     <section data-st-sec="geral">
       <h4>Por continente</h4>
@@ -2674,6 +2696,7 @@ function abreEstatisticas() {
       <div class="st-paises">${paisesStats.map(p => `<button data-st-pais="${p}">${bandeira(p)} ${esc(nomePais(p))}</button>`).join('')}</div>
       <div id="st-pais"></div>
     </section>
+    <section data-st-sec="voos" hidden><div id="st-voos"><p class="meta">Carregando…</p></div></section>
     <section data-st-sec="selos" hidden><div id="st-selos"><p class="meta">Carregando…</p></div></section>
     <section data-st-sec="aero" hidden><div id="st-aero"><p class="meta">Carregando…</p></div></section>
     <section data-st-sec="viagens" hidden>
@@ -2743,6 +2766,7 @@ function abreEstatisticas() {
     };
     m.querySelectorAll('[data-st-pais]').forEach(b => b.onclick = () => desenhaPais(b.dataset.stPais));
     if (paisesStats.length) desenhaPais((() => { try { const p = localStorage.getItem('poa-st-pais'); return paisesStats.includes(p) ? p : paisesStats[0]; } catch { return paisesStats[0]; } })());
+    htmlPassaporte().then(h => { const box = m.querySelector('#st-voos'); if (box) box.innerHTML = h; }).catch(() => {});
     calculaSelos().then(lista => {
       const box = m.querySelector('#st-selos'); if (!box) return;
       const desenha = todos => {
@@ -2970,7 +2994,7 @@ function abreBackup() {
     m.querySelector('#bk-fechar').onclick = fechar;
     m.querySelector('#bk-json').onclick = () => {
       const dados = { app: 'Por Onde Andei', versao: 2, gerado_em: new Date().toISOString(), rotulos: S.rotulos, lugares: S.lugares,
-        marcas: [...S.lr].flatMap(([l, mm]) => [...mm.keys()].map(r => ({ lugar_id: l, rotulo_id: r }))), visitas: S.visitas || [], viagens: S.viagens || [], paradas: S.paradas || [] };
+        marcas: [...S.lr].flatMap(([l, mm]) => [...mm.keys()].map(r => ({ lugar_id: l, rotulo_id: r }))), visitas: S.visitas || [], viagens: S.viagens || [], paradas: S.paradas || [], voos: S.voos || [] };
       baixarArquivo(`por-onde-andei-${hoje}.json`, JSON.stringify(dados, null, 2), 'application/json');
       toast('Cópia baixada');
     };
@@ -3059,11 +3083,227 @@ async function abreCard() {
   });
 }
 
+/* ================= Voos (diário de bordo) ================= */
+// Cada voo: data, número, companhia, origem e destino (IATA), horários locais, avião e matrícula.
+// A busca pelo número e data usa a AeroDataBox pela função "voo" do Supabase (a chave fica lá).
+let promCias, promModelos;
+const carregaCias = () => promCias ||= fetch('aerolinhas.json').then(r => r.json()).catch(e => { promCias = null; throw e; });
+const carregaModelos = () => promModelos ||= fetch('aeronaves.json').then(r => r.json()).catch(e => { promModelos = null; throw e; });
+const aeroPorIata = iata => (S.baseAero || []).find(b => b.iata === iata);
+const kmVoo = v => { const a = aeroPorIata(v.origem), b = aeroPorIata(v.destino); return a && b ? Math.round(distKm(a.lat, a.lon, b.lat, b.lon)) : 0; };
+// tempo de voo: o registrado; sem ele, estimativa pela distância (800 km/h + 30 min de solo e subida)
+const minVoo = v => v.minutos || Math.round(kmVoo(v) / 800 * 60 + 30);
+const fmtHoras = min => min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}` : `${min} min`;
+const nomeCia = (v, cias) => v.cia_nome || (cias && cias[v.cia]) || v.cia || 'Sem companhia';
+const fabricante = modelo => { const m = (modelo || '').trim(); if (!m) return null; const p = m.split(/[\s/]+/)[0]; return /^(Aerospatiale|ATR)/i.test(m) ? 'ATR' : p.replace(/^de$/i, 'De Havilland'); };
+const cidadeAero = iata => { const a = aeroPorIata(iata); return a ? (a.sub.split(' · ')[1] || '').split(',')[0] : ''; };
+const ordemVoos = () => [...(S.voos || [])].sort((a, b) => b.data.localeCompare(a.data) || (b.partida || '').localeCompare(a.partida || ''));
+function abreVoos() {
+  Promise.all([carregaBase('aeroporto'), carregaCias()]).catch(() => {}).then(async () => {
+    const cias = await carregaCias().catch(() => ({}));
+    const desenhar = m => {
+      const vs = ordemVoos(), anos = new Map();
+      vs.forEach(v => { const a = v.data.slice(0, 4); if (!anos.has(a)) anos.set(a, []); anos.get(a).push(v); });
+      m.querySelector('#vo-corpo').innerHTML = vs.length ? [...anos].map(([ano, lista]) => `<h4>${ano} · ${lista.length} ${lista.length === 1 ? 'voo' : 'voos'}</h4>
+        ${lista.map(v => `<button class="voo-card" data-voo="${v.id}">
+          <span class="voo-rota"><b>${esc(v.origem)}</b><i>✈</i><b>${esc(v.destino)}</b></span>
+          <span class="voo-info"><b>${esc([v.numero, nomeCia(v, cias)].filter(Boolean).join(' · '))}</b>
+          <small>${esc([new Date(v.data + 'T12:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }), cidadeAero(v.origem) && cidadeAero(v.destino) ? `${cidadeAero(v.origem)} → ${cidadeAero(v.destino)}` : '', v.modelo, v.matricula].filter(Boolean).join(' · '))}</small></span></button>`).join('')}`).join('')
+        : '<p class="meta">Nenhum voo ainda. Toque em “Novo voo”: com o número e a data, o app busca o resto.</p>';
+      m.querySelectorAll('[data-voo]').forEach(b => b.onclick = () => editaVoo(S.voos.find(x => x.id === b.dataset.voo), () => desenhar(m)));
+    };
+    abreModal(`<h3>Voos</h3><div id="vo-corpo"></div>
+      <div class="acoes"><button class="btn" id="vo-fechar">Fechar</button><button class="btn principal" id="vo-novo">Novo voo</button></div>`, (m, fechar) => {
+      m.querySelector('#vo-fechar').onclick = fechar;
+      m.querySelector('#vo-novo').onclick = () => editaVoo(null, () => desenhar(m));
+      desenhar(m);
+    });
+  });
+}
+async function buscaVoo(numero, data) {
+  const { data: r, error } = await supa.functions.invoke('voo', { body: { numero, data } });
+  if (error) {
+    let corpo = null; try { corpo = await error.context?.json?.(); } catch {}
+    if (corpo?.erro === 'sem_chave') throw new Error('A busca automática ainda não está configurada.');
+    if (corpo?.erro === 'pedido_invalido') throw new Error('Confira o número (ex.: G31673) e a data.');
+    throw new Error('Não deu para buscar agora. Preencha à mão ou tente mais tarde.');
+  }
+  return r?.trechos || [];
+}
+function editaVoo(v, aoSalvar) {
+  const novo = !v; v = v || { data: new Date().toISOString().slice(0, 10) };
+  Promise.all([carregaBase('aeroporto'), carregaCias(), carregaModelos()]).catch(() => {}).then(async () => {
+    const cias = await carregaCias().catch(() => ({})), modelos = await carregaModelos().catch(() => []);
+    const vgs = [...(S.viagens || [])].sort((a, b) => inicioViagem(b).localeCompare(inicioViagem(a)));
+    abreModal(`<h3>${novo ? 'Novo voo' : 'Editar voo'}</h3>
+      <div class="voo-form">
+        <div class="campo"><label for="vf-data">Data</label><input id="vf-data" type="date" value="${esc(v.data)}"></div>
+        <div class="campo"><label for="vf-num">Número do voo</label><div class="voo-busca"><input id="vf-num" placeholder="G31673" autocapitalize="characters" value="${esc(v.numero || '')}"><button class="btn" id="vf-buscar" type="button">Buscar</button></div></div>
+        <div id="vf-trechos"></div>
+        <div class="campo"><label for="vf-org">De</label><input id="vf-org" maxlength="3" placeholder="MCZ" autocapitalize="characters" value="${esc(v.origem || '')}"><small id="vf-org-n" class="meta"></small></div>
+        <div class="campo"><label for="vf-dst">Para</label><input id="vf-dst" maxlength="3" placeholder="GRU" autocapitalize="characters" value="${esc(v.destino || '')}"><small id="vf-dst-n" class="meta"></small></div>
+        <div class="campo"><label for="vf-sai">Partida</label><input id="vf-sai" type="time" value="${esc(v.partida || '')}"></div>
+        <div class="campo"><label for="vf-che">Chegada</label><input id="vf-che" type="time" value="${esc(v.chegada || '')}"></div>
+        <div class="campo"><label for="vf-cia">Companhia (código)</label><input id="vf-cia" maxlength="3" placeholder="G3" autocapitalize="characters" value="${esc(v.cia || '')}"><small id="vf-cia-n" class="meta"></small></div>
+        <div class="campo"><label for="vf-mat">Matrícula</label><input id="vf-mat" placeholder="PR-GXA" autocapitalize="characters" value="${esc(v.matricula || '')}"></div>
+        <div class="campo"><label for="vf-mod">Avião</label><input id="vf-mod" list="vf-modelos" placeholder="Boeing 737-800" value="${esc(v.modelo || '')}"><datalist id="vf-modelos">${modelos.map(x => `<option value="${esc(x[0])}">`).join('')}</datalist></div>
+        ${vgs.length ? `<div class="campo"><label for="vf-vg">Viagem</label><select id="vf-vg"><option value="">Nenhuma</option>${vgs.map(x => `<option value="${x.id}" ${v.viagem_id === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></div>` : ''}
+        <div class="campo"><label for="vf-notas">Notas</label><input id="vf-notas" value="${esc(v.notas || '')}"></div>
+      </div>
+      <div class="acoes">${novo ? '' : '<button class="btn perigo" id="vf-apagar">Excluir</button>'}<button class="btn" id="vf-cancelar">Cancelar</button><button class="btn principal" id="vf-salvar">Salvar</button></div>`, (m, fechar) => {
+      const $m = s => m.querySelector(s);
+      let minutos = v.minutos || null, ciaNome = v.cia_nome || null;
+      const nomeAero = (inp, out) => { const a = aeroPorIata(inp.value.trim().toUpperCase()); $m(out).textContent = a ? a.nome : inp.value.trim().length === 3 ? 'Aeroporto fora da lista' : ''; };
+      const nomeDaCia = () => { const c = $m('#vf-cia').value.trim().toUpperCase(); $m('#vf-cia-n').textContent = c ? (ciaNome && c === v.cia ? ciaNome : cias[c] || '') : ''; };
+      $m('#vf-org').oninput = () => nomeAero($m('#vf-org'), '#vf-org-n'); $m('#vf-dst').oninput = () => nomeAero($m('#vf-dst'), '#vf-dst-n');
+      $m('#vf-cia').oninput = () => { ciaNome = null; nomeDaCia(); };
+      // companhia sai do começo do número (G31673 → G3)
+      $m('#vf-num').oninput = () => { const n = $m('#vf-num').value.toUpperCase().replace(/\s/g, ''); if (/^[A-Z0-9]{2}\d/.test(n) && !$m('#vf-cia').value) { $m('#vf-cia').value = n.slice(0, 2); nomeDaCia(); } };
+      nomeAero($m('#vf-org'), '#vf-org-n'); nomeAero($m('#vf-dst'), '#vf-dst-n'); nomeDaCia();
+      const preenche = t => {
+        const set = (id, val) => { if (val) $m(id).value = val; };
+        set('#vf-num', t.numero); set('#vf-org', t.origem); set('#vf-dst', t.destino); set('#vf-cia', t.cia); set('#vf-sai', t.partida); set('#vf-che', t.chegada); set('#vf-mod', t.modelo); set('#vf-mat', t.matricula);
+        minutos = t.minutos || minutos; ciaNome = t.cia_nome || ciaNome; v = { ...v, cia: t.cia };
+        nomeAero($m('#vf-org'), '#vf-org-n'); nomeAero($m('#vf-dst'), '#vf-dst-n'); nomeDaCia(); $m('#vf-trechos').innerHTML = '';
+      };
+      $m('#vf-buscar').onclick = async () => {
+        const b = $m('#vf-buscar'), caixa = $m('#vf-trechos'); b.disabled = true; caixa.innerHTML = '<p class="meta">Buscando…</p>';
+        try {
+          const ts = await buscaVoo($m('#vf-num').value, $m('#vf-data').value);
+          if (!ts.length) caixa.innerHTML = '<p class="meta">Voo não encontrado nessa data. A busca alcança cerca de 1 ano para trás; voos mais antigos entram à mão.</p>';
+          else if (ts.length === 1) preenche(ts[0]);
+          else { // voo com escala: mesmo número em mais de um trecho
+            caixa.innerHTML = `<p class="meta">Esse número tem ${ts.length} trechos. Qual foi o seu?</p><div class="menu-lista">${ts.map((t, i) => `<button data-tr="${i}">${esc(t.origem)} → ${esc(t.destino)}<small>${esc([t.partida, t.modelo].filter(Boolean).join(' · '))}</small></button>`).join('')}</div>`;
+            caixa.querySelectorAll('[data-tr]').forEach(x => x.onclick = () => preenche(ts[+x.dataset.tr]));
+          }
+        } catch (e) { caixa.innerHTML = `<p class="meta">${esc(e.message)}</p>`; }
+        b.disabled = false;
+      };
+      $m('#vf-cancelar').onclick = fechar;
+      if (!novo) $m('#vf-apagar').onclick = async () => {
+        if (!confirm('Excluir este voo? Os aeroportos continuam marcados.')) return;
+        const { error } = await grava({ tipo: 'apagar', tabela: 'viagem_voos', filtro: { id: v.id } });
+        if (error) return toast('Erro: ' + error.message);
+        S.voos = S.voos.filter(x => x.id !== v.id); atualizaTudo(); fechar(); aoSalvar?.(); toast('Voo excluído');
+      };
+      $m('#vf-salvar').onclick = async () => {
+        const up = s => $m(s).value.trim().toUpperCase();
+        const linha = { data: $m('#vf-data').value, numero: up('#vf-num').replace(/\s/g, '') || null, cia: up('#vf-cia') || null, cia_nome: ciaNome || (cias[up('#vf-cia')] ?? null),
+          origem: up('#vf-org'), destino: up('#vf-dst'), partida: $m('#vf-sai').value || null, chegada: $m('#vf-che').value || null,
+          modelo: $m('#vf-mod').value.trim() || null, matricula: up('#vf-mat') || null, viagem_id: $m('#vf-vg')?.value || null, notas: $m('#vf-notas').value.trim() || null, minutos };
+        if (!linha.data || !/^[A-Z0-9]{3}$/.test(linha.origem) || !/^[A-Z0-9]{3}$/.test(linha.destino)) return toast('Preencha a data e os códigos de origem e destino (3 letras).');
+        if (linha.origem === linha.destino) return toast('Origem e destino iguais.');
+        // horário mudou à mão: o tempo de voo registrado deixa de valer (fica a estimativa)
+        if (!novo && (linha.partida !== v.partida || linha.chegada !== v.chegada) && minutos === v.minutos) linha.minutos = null;
+        let erro;
+        if (novo) { linha.id = novoId(); ({ error: erro } = await grava({ tipo: 'inserir', tabela: 'viagem_voos', linha })); if (!erro) S.voos = [...(S.voos || []), { ...linha }]; }
+        else { ({ error: erro } = await grava({ tipo: 'atualizar', tabela: 'viagem_voos', valores: linha, filtro: { id: v.id } })); if (!erro) Object.assign(S.voos.find(x => x.id === v.id), linha); }
+        if (erro) return toast('Erro ao salvar: ' + erro.message);
+        fechar(); atualizaTudo(); aoSalvar?.(); toast(novo ? 'Voo salvo' : 'Voo atualizado');
+        perguntaAeroportos(S.voos.find(x => x.id === (novo ? linha.id : v.id)));
+      };
+    });
+  });
+}
+// depois de salvar: aeroportos do voo que ainda não estão marcados. Chegou e saiu de novo em até 1 dia = escala.
+function ehConexao(iata, voo) {
+  const dia = d => Date.parse(d + 'T12:00') / 864e5;
+  return (S.voos || []).some(w => w.id !== voo.id && ((w.origem === iata && voo.destino === iata && dia(w.data) - dia(voo.data) >= 0 && dia(w.data) - dia(voo.data) <= 1)
+    || (w.destino === iata && voo.origem === iata && dia(voo.data) - dia(w.data) >= 0 && dia(voo.data) - dia(w.data) <= 1)));
+}
+function perguntaAeroportos(voo) {
+  if (!voo) return;
+  const estive = rotuloVisitaPadrao(), escala = estive && S.rotulos.find(r => r.id !== estive.id && rotuloServe(r, 'aeroporto') && (r.so_lugar || r.tipos?.includes('aeroporto'))); // rótulo próprio de aeroporto (ex.: Escala)
+  const faltam = [voo.origem, voo.destino].filter(i => { const l = lugarDaRef('iata:' + i); return aeroPorIata(i) && (!l || !rotulosDe(l.id).size); });
+  if (!faltam.length || !estive) return;
+  abreModal(`<h3>Marcar aeroportos?</h3><p class="meta">Estes aeroportos do voo ainda não estão no seu mapa.</p>
+    ${faltam.map(i => `<div class="campo"><label for="va-${i}">${esc(i)} · ${esc(aeroPorIata(i).nome)}</label><select id="va-${i}" data-iata="${i}">
+      <option value="${estive.id}" ${escala && ehConexao(i, voo) ? '' : 'selected'}>${esc(estive.nome)}</option>
+      ${escala ? `<option value="${escala.id}" ${ehConexao(i, voo) ? 'selected' : ''}>${esc(escala.nome)} (só conexão)</option>` : ''}
+      <option value="">Não marcar</option></select></div>`).join('')}
+    <div class="acoes"><button class="btn" id="va-nao">Agora não</button><button class="btn principal" id="va-ok">Marcar</button></div>`, (m, fechar) => {
+    m.querySelector('#va-nao').onclick = fechar;
+    m.querySelector('#va-ok').onclick = async () => {
+      for (const s of m.querySelectorAll('select[data-iata]')) if (s.value) {
+        const ja = lugarDaRef('iata:' + s.dataset.iata);
+        if (ja) await alternaRotulo(ja.id, s.value); else await marcaBase('iata:' + s.dataset.iata, s.value);
+      }
+      fechar();
+    };
+  });
+}
+// rotas no mapa: arco de círculo máximo entre os aeroportos, na aba Aeroportos
+let camadaRotas = null;
+function arco(a, b, n = 48) {
+  const r = Math.PI / 180, [la1, lo1, la2, lo2] = [a.lat * r, a.lon * r, b.lat * r, b.lon * r];
+  const d = 2 * Math.asin(Math.sqrt(Math.sin((la2 - la1) / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin((lo2 - lo1) / 2) ** 2));
+  if (!d) return [[a.lat, a.lon]];
+  const pts = []; let antes = null;
+  for (let i = 0; i <= n; i++) {
+    const f = i / n, A = Math.sin((1 - f) * d) / Math.sin(d), B = Math.sin(f * d) / Math.sin(d);
+    const x = A * Math.cos(la1) * Math.cos(lo1) + B * Math.cos(la2) * Math.cos(lo2), y = A * Math.cos(la1) * Math.sin(lo1) + B * Math.cos(la2) * Math.sin(lo2), z = A * Math.sin(la1) + B * Math.sin(la2);
+    let lon = Math.atan2(y, x) / r; const lat = Math.atan2(z, Math.sqrt(x * x + y * y)) / r;
+    if (antes !== null) while (lon - antes > 180) lon -= 360; while (antes !== null && lon - antes < -180) lon += 360; // sem pular o antimeridiano
+    pts.push([lat, lon]); antes = lon;
+  }
+  return pts;
+}
+function desenhaRotas() {
+  if (!mapa) return;
+  if (!camadaRotas) camadaRotas = L.layerGroup();
+  if (S.aba !== 'transporte' || !(S.voos || []).length) { camadaRotas.remove(); return; }
+  if (!S.baseAero) { carregaBase('aeroporto').then(desenhaRotas).catch(() => {}); return; }
+  const rotas = new Map();
+  S.voos.forEach(v => { const k = [v.origem, v.destino].sort().join('-'); rotas.set(k, (rotas.get(k) || 0) + 1); });
+  camadaRotas.clearLayers();
+  const cor = corToken('--visit');
+  rotas.forEach((n, k) => { const [x, y] = k.split('-').map(aeroPorIata); if (x && y) L.polyline(arco(x, y), { color: cor, weight: Math.min(1.5 + n * 0.8, 5), opacity: 0.75, interactive: false }).addTo(camadaRotas); });
+  if (!mapa.hasLayer(camadaRotas)) camadaRotas.addTo(mapa);
+}
+// estatísticas dos voos (o "passaporte")
+async function htmlPassaporte() {
+  await carregaBase('aeroporto').catch(() => {});
+  const cias = await carregaCias().catch(() => ({}));
+  const vs = S.voos || []; if (!vs.length) return '<p class="meta">Nenhum voo registrado. Cadastre em Menu › Voos.</p>';
+  const km = vs.reduce((t, v) => t + kmVoo(v), 0), min = vs.reduce((t, v) => t + minVoo(v), 0);
+  const conta = f => { const m = new Map(); vs.forEach(v => { const k = f(v); if (k) m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'pt-BR')); };
+  const lista = (pares, vazio) => pares.length ? `<div class="tabela">${pares.map(([k, n]) => `<span>${esc(k)}</span><b>${n} ${n === 1 ? 'voo' : 'voos'}</b>`).join('')}</div>` : `<p class="meta">${vazio}</p>`;
+  const porKm = [...vs].filter(kmVoo).sort((a, b) => kmVoo(b) - kmVoo(a));
+  const aeros = new Map(); vs.forEach(v => [v.origem, v.destino].forEach(i => aeros.set(i, (aeros.get(i) || 0) + 1)));
+  const topAero = [...aeros].sort((a, b) => b[1] - a[1])[0];
+  const rotas = conta(v => [v.origem, v.destino].sort().join(' ⇄ ')), anos = conta(v => v.data.slice(0, 4)).sort((a, b) => b[0].localeCompare(a[0]));
+  const regs = new Map(); vs.filter(v => v.matricula).forEach(v => { const r = regs.get(v.matricula) || { n: 0, modelo: v.modelo, cia: nomeCia(v, cias) }; r.n++; regs.set(v.matricula, r); });
+  const semModelo = vs.filter(v => !v.modelo).length, estimado = vs.some(v => !v.minutos);
+  const paises = new Set(vs.flatMap(v => [aeroPorIata(v.origem)?.pais, aeroPorIata(v.destino)?.pais]).filter(Boolean));
+  return `<div class="destaques">
+      <div><b>${vs.length}</b><span>${vs.length === 1 ? 'voo' : 'voos'}</span></div>
+      <div><b>${fmtKm(km)}</b><span>voados</span></div>
+      <div><b>${fmtHoras(min)}</b><span>no ar${estimado ? ' (aprox.)' : ''}</span></div>
+    </div>
+    <div class="tabela">
+      <span>Voltas na Terra</span><b>${(km / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b>
+      <span>Aeroportos</span><b>${aeros.size}</b>
+      <span>Países</span><b>${paises.size}</b>
+      ${topAero ? `<span>Aeroporto mais usado</span><b>${esc(topAero[0])} · ${topAero[1]}×</b>` : ''}
+      ${porKm.length ? `<span>Voo mais longo</span><b>${esc(porKm[0].origem)}→${esc(porKm[0].destino)} · ${fmtKm(kmVoo(porKm[0]))}</b>
+      <span>Voo mais curto</span><b>${esc(porKm.at(-1).origem)}→${esc(porKm.at(-1).destino)} · ${fmtKm(kmVoo(porKm.at(-1)))}</b>` : ''}
+    </div>
+    <h4>Companhias</h4>${lista(conta(v => nomeCia(v, cias)), 'Sem companhia registrada.')}
+    <h4>Aviões</h4>${lista(conta(v => v.modelo), 'Nenhum modelo registrado ainda.')}
+    ${conta(v => fabricante(v.modelo)).length > 1 ? `<h4>Fabricantes</h4>${lista(conta(v => fabricante(v.modelo)), '')}` : ''}
+    ${semModelo && semModelo < vs.length ? `<p class="meta">${semModelo} ${semModelo === 1 ? 'voo sem avião registrado' : 'voos sem avião registrado'}.</p>` : ''}
+    <h4>Matrículas</h4>${regs.size ? `<div class="tabela">${[...regs].sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0])).map(([r, x]) => `<span><b>${esc(r)}</b> · ${esc([x.modelo, x.cia].filter(Boolean).join(' · '))}</span><b>${x.n}×</b>`).join('')}</div>` : '<p class="meta">Nenhuma matrícula registrada ainda.</p>'}
+    <h4>Rotas</h4>${lista(rotas.slice(0, 10), '')}
+    <h4>Por ano</h4><div class="tabela">${anos.map(([a, n]) => `<span>${a}</span><b>${n} ${n === 1 ? 'voo' : 'voos'} · ${fmtKm(vs.filter(v => v.data.startsWith(a)).reduce((t, v) => t + kmVoo(v), 0))}</b>`).join('')}</div>
+    <p class="meta">Distância em linha reta pela curva da Terra (círculo máximo).${estimado ? ' Tempo aproximado quando o voo não tem horário registrado: distância a 800 km/h mais 30 minutos.' : ''}</p>`;
+}
+
 /* ================= Menu ================= */
 function abreMenu() {
   abreModal(`
     <h3>Menu</h3>
     <div class="menu-lista">
+      <button id="m-voos">Voos<small>Diário de bordo: companhias, aviões e rotas</small></button>
       <button id="m-viagens">Viagens<small>Roteiros, trechos e quilômetros</small></button>
       <button id="m-tempo">Linha do tempo<small>Suas visitas por ano e mês</small></button>
       <button id="m-card">Imagem para compartilhar<small>Mapa e números prontos para WhatsApp e Instagram</small></button>
@@ -3075,6 +3315,7 @@ function abreMenu() {
     m.querySelector('#m-rot').onclick = () => { fechar(); abreRotulos(); };
     m.querySelector('#m-tempo').onclick = () => { fechar(); abreLinhaDoTempo(); };
     m.querySelector('#m-viagens') && (m.querySelector('#m-viagens').onclick = () => { fechar(); abreViagens(); });
+    m.querySelector('#m-voos').onclick = () => { fechar(); abreVoos(); };
     m.querySelector('#m-card').onclick = () => { fechar(); abreCard(); };
     m.querySelector('#m-est') && (m.querySelector('#m-est').onclick = () => { fechar(); abreEstatisticas(); });
     m.querySelector('#m-band') && (m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); });

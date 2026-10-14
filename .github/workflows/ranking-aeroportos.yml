@@ -21,9 +21,10 @@ jobs:
       - run: python scripts/museus.py >> scripts/ranking-log.txt 2>&1 || (cat scripts/ranking-log.txt; echo FALHOU MUSEUS >> scripts/ranking-log.txt)
       - run: python scripts/cidades.py >> scripts/ranking-log.txt 2>&1 || (cat scripts/ranking-log.txt; echo FALHOU CIDADES >> scripts/ranking-log.txt)
       - run: python scripts/bases_fixas.py >> scripts/ranking-log.txt 2>&1 || (cat scripts/ranking-log.txt; echo FALHOU BASES >> scripts/ranking-log.txt)
+      - run: python scripts/voos_bases.py >> scripts/ranking-log.txt 2>&1 || (cat scripts/ranking-log.txt; echo FALHOU VOOS >> scripts/ranking-log.txt)
       - name: Salva se mudou
         run: |
           git config user.name "Claude"
           git config user.email "noreply@anthropic.com"
-          git add ranking-aeroportos.json museus.json cidades-pop.json cidades-mundo.json aeroportos.json municipios-br.json scripts/ranking-log.txt
+          git add ranking-aeroportos.json museus.json cidades-pop.json cidades-mundo.json aeroportos.json municipios-br.json aerolinhas.json aeronaves.json scripts/ranking-log.txt
           git diff --cached --quiet || (git commit -m "Atualiza bases (rankings, museus, cidades, aeroportos e municípios)" && git push)
