@@ -3363,8 +3363,8 @@ function desenhaRotas() {
 // cores que lembram cada companhia (o logo vem de um banco público; sem ele, fica a faixa colorida)
 const COR_CIA = { G3: '#ff6a13', AD: '#0b3d91', JJ: '#c8102e', LA: '#1b0088', '4M': '#1b0088', AR: '#0f6db3', TP: '#d71920', CM: '#003a70', AV: '#da291c', H2: '#ff4f00', JA: '#1e2a78', FO: '#ffc600', AA: '#0078d2', UA: '#005daa', DL: '#c8102e', AF: '#002157', KL: '#00a1de', IB: '#d7192d', UX: '#00539f', LH: '#05164d', BA: '#075aaa', EK: '#d71921', QR: '#5c0632', TK: '#c70a0c', '2Z': '#0f4c81' };
 const corCia = v => COR_CIA[v.cia] || '#5b6f71';
-// TAM voou com o código JJ, que hoje é da LATAM: para não mostrar o logo errado, a TAM fica só com o nome
-const logoCia = v => v.cia && !/^tam\b/i.test(v.cia_nome || '') ? `https://pics.avs.io/200/80/${encodeURIComponent(v.cia)}.png` : null;
+// logo atual pelo código (TAM aparece com o logo de hoje, LATAM, mas com o nome da época)
+const logoCia = v => v.cia ? `https://pics.avs.io/200/80/${encodeURIComponent(v.cia)}.png` : null;
 const CORES_PAIS = ['#1f7a4d', '#2b7bb9', '#8e44ad', '#c0392b', '#d35400', '#16a085', '#7d5a2b', '#2c3e50', '#b8860b', '#6d4c9f'];
 const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const dataCurta = d => `${+d.slice(8)} ${MESES_CURTOS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`;
