@@ -535,7 +535,6 @@ const TIPOS = {
   cidade:    { nome: 'Cidades', um: 'Cidade', curto: 'Cidades' },
   unesco:    { nome: 'Patrimônios da UNESCO', um: 'Patrimônio da UNESCO', curto: 'UNESCO' },
   aeroporto: { nome: 'Aeroportos', um: 'Aeroporto', curto: 'Aeroportos' },
-  porto:     { nome: 'Portos', um: 'Porto', curto: 'Portos' },
   atracao:   { nome: 'Atrações e parques', um: 'Atração turística', curto: 'Atrações' },
   museu:     { nome: 'Museus', um: 'Museu', curto: 'Museus' },
   pais:      { nome: 'Países', um: 'País inteiro', curto: 'Países' },
@@ -546,7 +545,6 @@ const ICONES = {
   cidade: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l5-3v16M10 21V10h9v11M13 13h3M13 17h3"/></svg>',
   unesco: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-5 9 5M5 9v9M9.5 9v9M14.5 9v9M19 9v9M3 21h18"/></svg>',
   aeroporto: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.5v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V8.5l-8 5v2l8-2.5V18l-2 1.5V21l3.5-1 3.5 1v-1.5L13 18v-5z"/></svg>',
-  porto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><path d="M12 7v14M8 11h8M4 14a8 7 0 0 0 16 0"/></svg>',
   atracao: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>',
   parque: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 6 10h3l-4 6h5v6h4v-6h5l-4-6h3z"/></svg>',
   estado: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>',
@@ -669,7 +667,7 @@ function salvaCopia() {
 let tCopia; const agendaCopia = () => { clearTimeout(tCopia); tCopia = setTimeout(salvaCopia, 1500); };
 function leCopia() { try { return JSON.parse(localStorage.getItem(CHAVE_COPIA)); } catch { return null; } }
 function aplicaCopia(c) {
-  S.rotulos = c.rotulos || []; S.lugares = c.lugares || []; S.visitas = c.visitas || []; S.viagens = c.viagens || []; S.paradas = c.paradas || []; S.config = c.config || {};
+  S.rotulos = c.rotulos || []; S.lugares = (c.lugares || []).map(l => l.tipo === 'porto' ? { ...l, tipo: 'atracao' } : l); S.visitas = c.visitas || []; S.viagens = c.viagens || []; S.paradas = c.paradas || []; S.config = c.config || {};
   S.lr = new Map((c.lr || []).map(([l, rs]) => [l, new Map(rs.map(r => [r, null]))]));
 }
 let fila = (() => { try { return JSON.parse(localStorage.getItem(CHAVE_FILA)) || []; } catch { return []; } })();
@@ -733,6 +731,7 @@ async function carregaDados() {
   }
   S.rotulos = rot;
   S.lugares = await todos(() => supa.from('viagem_lugares').select('*').order('nome'));
+  S.lugares.forEach(l => { if (l.tipo === 'porto') l.tipo = 'atracao'; }); // portos saíram do app
   const lr = await todos(() => supa.from('viagem_lugar_rotulos').select('lugar_id,rotulo_id,data'));
   S.visitas = await todos(() => supa.from('viagem_visitas').select('id,lugar_id,data,precisao,nota,viagem_id').order('data', { ascending: false })).catch(() => []);
   S.viagens = await todos(() => supa.from('viagem_viagens').select('*')).catch(() => []);
@@ -746,7 +745,7 @@ const rotulosDe = id => S.lr.get(id) || new Map();
 // rótulo pode valer só para alguns tipos (ex.: Escala só em aeroportos)
 const rotuloServe = (r, tipo) => !r.tipos?.length || r.tipos.includes(tipo);
 const rotulosPara = tipo => S.rotulos.filter(r => rotuloServe(r, tipo));
-const TIPOS_DA_ABA = { transporte: ['aeroporto', 'porto'] };
+const TIPOS_DA_ABA = { transporte: ['aeroporto'] };
 const rotulosDaAba = aba => S.rotulos.filter(r => !r.tipos?.length || (TIPOS_DA_ABA[aba] || [aba]).some(t => r.tipos.includes(t)));
 const idsVisita = () => new Set(S.rotulos.filter(r => r.conta_como_visita).map(r => r.id));
 // rótulos como "Escala": contam o lugar (aeroporto entra na contagem), mas não pintam país nem estado
@@ -1257,7 +1256,7 @@ function estiloEstado(f) {
   return { stroke: true, fill: z < 7, color: cor, weight: z >= 7 ? 2 : 1, opacity: 0.85, fillColor: cor, fillOpacity: z >= 6 ? 0.12 : 0.28 };
 }
 // Cada aba mostra só os pinos do seu tipo; Países e Estados mostram só a pintura
-const tiposDaAba = aba => ({ cidade: ['cidade'], unesco: ['unesco'], transporte: ['aeroporto', 'porto'], atracao: ['atracao'], museu: ['museu'], paises: [], estados: [] })[aba] || Object.keys(TIPOS).filter(t => t !== 'pais');
+const tiposDaAba = aba => ({ cidade: ['cidade'], unesco: ['unesco'], transporte: ['aeroporto'], atracao: ['atracao'], museu: ['museu'], paises: [], estados: [] })[aba] || Object.keys(TIPOS).filter(t => t !== 'pais');
 const abaDeRegiao = () => S.aba === 'paises' || S.aba === 'estados';
 function desenhaPinos() {
   camadaPinos.clearLayers();
@@ -1284,7 +1283,7 @@ function desenhaPinos() {
 function calcula() {
   const vis = idsVisita(), so = idsSoLugar();
   paisesVis = new Set(); paisesQuero = new Set(); estadosVis = new Set(); estadosQuero = new Set();
-  const cont = { cidade: 0, unesco: 0, aeroporto: 0, porto: 0, atracao: 0, museu: 0, pais: 0 };
+  const cont = { cidade: 0, unesco: 0, aeroporto: 0, atracao: 0, museu: 0, pais: 0 };
   for (const l of S.lugares) {
     if (!S.lr.has(l.id)) continue;
     if (visitado(l.id, vis)) {
@@ -1318,7 +1317,7 @@ function atualizaTudo() {
     ['paises', `${paisesVis.size}<small>/${totalPaises}</small>`, 'Países'],
     ['estados', estadosVis.size, 'Estados'],
     ['cidade', c.cidade, 'Cidades'],
-    ['transporte', c.aeroporto + c.porto, 'Aeroportos e portos'],
+    ['transporte', c.aeroporto, 'Aeroportos'],
   ];
   const ICONE_ABA = { paises: ICONES.pais, estados: ICONES.estado, cidade: ICONES.cidade, unesco: ICONES.unesco, transporte: ICONES.aeroporto, atracao: ICONES.atracao, museu: ICONES.museu };
   const extra = EXTRAS.find(([k]) => k === S.aba);
@@ -1350,7 +1349,7 @@ function avisoMapa(n, total) {
   return n < total ? `<div class="no-mapa">Mostrando ${n} de ${total} · só o que aparece no mapa <button data-ver-todos>Ver todos</button></div>` : '';
 }
 // colunas do resumo de países/estados (mesma ordem da legenda)
-const COLS_RESUMO = [['cidade', 'Cidades'], ['unesco', 'UNESCO'], ['aeroporto', 'Aeroportos'], ['porto', 'Portos'], ['atracao', 'Atrações e parques'], ['museu', 'Museus']];
+const COLS_RESUMO = [['cidade', 'Cidades'], ['unesco', 'UNESCO'], ['aeroporto', 'Aeroportos'], ['atracao', 'Atrações e parques'], ['museu', 'Museus']];
 // Ordem da lista: A–Z, mais perto (de onde você está; sem localização, da sua casa) ou maior
 // (população nas cidades, movimento nos aeroportos, área em países e estados). Lembra por aba.
 const NOME_TAMANHO = { cidade: 'Mais populosa', transporte: 'Mais movimentado', paises: 'Maior área', estados: 'Maior área' };
@@ -1388,7 +1387,7 @@ function renderLista() {
   if (S.filtroRot && !S.rotulos.some(r => r.id === S.filtroRot)) S.filtroRot = null;
   $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? COLS_RESUMO.map(([t, nome]) => `<span class="leg">${ICONES[t]}${nome}</span>`).join('') : rotulosDaAba(aba).map(r => `<button class="filtro-rot" data-filtro-rot="${r.id}" aria-pressed="${S.filtroRot === r.id}" title="Mostrar só ${esc(r.nome)}"><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</button>`).join('')
     + (S.filtroRot ? '<button class="filtro-limpa" data-filtro-rot="">Mostrar todos</button>' : '');
-  const titulos = { paises: 'Países', estados: 'Estados e províncias', transporte: 'Aeroportos e portos' };
+  const titulos = { paises: 'Países', estados: 'Estados e províncias', transporte: 'Aeroportos' };
   $('#painel-titulo').textContent = titulos[aba] || TIPOS[aba].nome;
   let html = '';
   if (aba === 'paises' || aba === 'estados') {
@@ -1400,8 +1399,8 @@ function renderLista() {
       cont.set(k, (cont.get(k) || 0) + 1);
       if (!det.has(k)) det.set(k, {}); const d = det.get(k); d[l.tipo] = (d[l.tipo] || 0) + 1;
     }
-    const UM = { cidade: 'cidade', unesco: 'UNESCO', aeroporto: 'aeroporto', porto: 'porto', atracao: 'atração', museu: 'museu' };
-    const VARIOS = { cidade: 'cidades', unesco: 'UNESCO', aeroporto: 'aeroportos', porto: 'portos', atracao: 'atrações', museu: 'museus' };
+    const UM = { cidade: 'cidade', unesco: 'UNESCO', aeroporto: 'aeroporto', atracao: 'atração', museu: 'museu' };
+    const VARIOS = { cidade: 'cidades', unesco: 'UNESCO', aeroporto: 'aeroportos', atracao: 'atrações', museu: 'museus' };
     // sempre as mesmas colunas, na mesma ordem; zero fica apagado
     const resumoHtml = k => `<span class="conts">${COLS_RESUMO.map(([t, nome]) => { const n = det.get(k)?.[t] || 0; return `<span class="${n ? '' : 'zero'}" title="${nome}">${ICONES[t]}${n}</span>`; }).join('')}</span>`;
     const resumo = k => Object.keys(TIPOS).filter(t => det.get(k)?.[t]).map(t => `${det.get(k)[t]} ${det.get(k)[t] === 1 ? UM[t] : VARIOS[t]}`).join(' · ');
@@ -1446,7 +1445,7 @@ function renderLista() {
     else if (totalK.size) html = avisoMapa(0, totalK.size) + '<div class="vazio-lista"><b>Nenhum marcado nesta parte do mapa</b>Afaste o mapa ou toque em “Ver todos”.</div>';
     if (!html) html = `<div class="vazio-lista"><b>Nenhum ${aba === 'paises' ? 'país' : 'estado'} ainda</b>Marque lugares como “${esc(S.rotulos.find(r => r.conta_como_visita)?.nome || 'Estive')}” e eles aparecem aqui.</div>`;
   } else {
-    const tipos = aba === 'transporte' ? ['aeroporto', 'porto'] : [aba];
+    const tipos = [aba === 'transporte' ? 'aeroporto' : aba];
     const todos = S.lugares.filter(l => tipos.includes(l.tipo) && (!S.filtroRot || rotulosDe(l.id).has(S.filtroRot)) && (!f || norm(l.nome + ' ' + nomeEstado(l.estado) + ' ' + nomePais(l.pais)).includes(f)));
     const ls = ordena(todos.filter(visivel), aba, l => ({ nome: l.nome, lat: l.lat, lon: l.lon,
       tam: l.tipo === 'cidade' ? popCidade(l)?.pop : l.tipo === 'aeroporto' && rankingAero && l.ref_externa?.startsWith('iata:') ? paxDe(l.ref_externa.slice(5))?.pax : 0 }));
@@ -1649,7 +1648,7 @@ function novoLugar(dados, sugestoes) {
       if (error) { toast('Erro ao salvar: ' + error.message); return false; }
       S.lugares.push(data);
       try { await salvaRotulosDoLugar(data.id, sel); } catch (e) { toast('Lugar salvo, mas os rótulos falharam: ' + e.message); }
-      S.aba = v.tipo === 'aeroporto' || v.tipo === 'porto' ? 'transporte' : v.tipo;
+      S.aba = v.tipo === 'aeroporto' ? 'transporte' : v.tipo;
       atualizaTudo(); toast(`${v.nome} adicionado`);
       return data.id;
     },
@@ -1680,7 +1679,7 @@ async function tocaIconeDoMapa(e) {
   if (ja) return abreLugar(ja.id);
   const tipo = f.sourceLayer === 'aerodrome_label' || p.class === 'aerodrome' ? 'aeroporto'
     : ['museum', 'art_gallery'].includes(p.class) || p.subclass === 'museum' ? 'museu'
-    : ['harbor', 'ferry_terminal'].includes(p.class) ? 'porto' : 'atracao';
+    : 'atracao';
   // aeroporto da base oficial (pelo código IATA) entra ligado ao ranking
   if (tipo === 'aeroporto' && p.iata) { try { await carregaBase('aeroporto'); const b = acharBase('iata:' + p.iata); if (b) return abreBase(b.ref); } catch {} }
   const dados = { lat, lon, tipo, nome, pais: localizar(lat, lon).pais };
@@ -1777,7 +1776,6 @@ const NAO_CIDADE = new Set(['hamlet', 'isolated_dwelling', 'neighbourhood', 'sub
 function tipoDoResultado(r) {
   const c = r.category || r.class, t = r.type;
   if (c === 'aeroway') return 'aeroporto';
-  if (t === 'harbour' || t === 'ferry_terminal' || t === 'port' || (c === 'landuse' && t === 'harbour')) return 'porto';
   if (t === 'museum' || r.addresstype === 'museum') return 'museu';
   if (c === 'place' || c === 'boundary') return NAO_CIDADE.has(t) || NAO_CIDADE.has(r.addresstype) ? 'bairro' : 'cidade';
   if (['tourism', 'historic', 'leisure', 'natural', 'amenity', 'building', 'man_made'].includes(c)) return 'atracao';
@@ -1855,7 +1853,7 @@ function sugereEnquantoDigita(q) {
     const ms = buscaMunicipios(q);
     box.hidden = false;
     box.innerHTML = linhasPaises(q) + (ms.length ? `<div class="grupo-busca">Municípios do Brasil</div>${ms.map(linhaMunicipio).join('')}` : '')
-      + `<button data-mundo="1" class="mundo"><b>Buscando “${esc(q.trim())}” no mundo…</b><small>Cidades de fora, aeroportos, portos, atrações</small></button>`;
+      + `<button data-mundo="1" class="mundo"><b>Buscando “${esc(q.trim())}” no mundo…</b><small>Cidades de fora, aeroportos, atrações</small></button>`;
     ligaResultados(box, []);
     // procura no mundo sozinho quando a pessoa para de digitar (sem precisar tocar no botão)
     if (q.trim().length >= 3) digitaTimer = setTimeout(() => { if ($('#busca').value.trim() === q.trim()) buscar(q.trim()); }, 800);
@@ -1983,10 +1981,6 @@ const NOMES_PT = {
 const IGNORAR = ['porto da rua', 'gama'];
 // No Places Been, "Brasilia" sem acento nesse ponto é o patrimônio da UNESCO (Plano Piloto)
 const ESPECIAIS = [{ nome: 'brasilia', lat: -15.78333, lon: -47.9, vira: ['Plano Piloto de Brasília', 'unesco', 'unesco:445'] }];
-const PORTOS_EXTRAS = [
-  { tipo: 'porto', nome: 'Porto de Maceió', lat: -9.6807, lon: -35.7268, pais: 'BR' },
-  { tipo: 'porto', nome: 'Porto de Buenos Aires', lat: -34.5847, lon: -58.3699, pais: 'AR' },
-];
 function lerCSV(txt) {
   const linhas = txt.replace(/^﻿/, '').split(/\r?\n/).filter(x => x.trim());
   const sep = linhas[0].includes(';') ? ';' : ',';
@@ -1996,7 +1990,7 @@ function lerCSV(txt) {
   const cab = cel(linhas[0]).map(h => h.trim().toLowerCase());
   return linhas.slice(1).map(l => { const v = cel(l); const o = {}; cab.forEach((h, i) => o[h] = (v[i] || '').trim()); return o; });
 }
-function preparaImportacao(linhas, incluirPortos) {
+function preparaImportacao(linhas) {
   const notas = [], novos = [];
   const rotPorStatus = { been: S.rotulos.find(r => r.conta_como_visita) || S.rotulos[0], want: S.rotulos.find(r => norm(r.nome) === 'quero ir'), fave: S.rotulos.find(r => norm(r.nome) === 'favorito') };
   const brutos = linhas.map(x => ({ nomeOrig: x.city || x.name || '', lat: parseFloat(x.lat), lon: parseFloat(x.lon), pais: (x.country || '').toUpperCase(), status: (x.been || '').split(',').map(s => s.trim()).filter(Boolean) }))
@@ -2010,7 +2004,6 @@ function preparaImportacao(linhas, incluirPortos) {
     for (const e of ESPECIAIS) if (norm(b.nomeOrig) === e.nome && distKm(b.lat, b.lon, e.lat, e.lon) < 1) { nome = e.vira[0]; tipo = e.vira[1]; ref = e.vira[2] || ref; notas.push(`${b.nomeOrig} (ponto da UNESCO) → ${nome}, patrimônio da UNESCO`); }
     novos.push({ ...b, tipo, nome, ref });
   }
-  if (incluirPortos) PORTOS_EXTRAS.forEach(p => novos.push({ ...p, nomeOrig: p.nome, status: ['been'], ref: null }));
   // tira duplicados: mesmo tipo, nome parecido e perto (fica o nome mais completo; junta os rótulos)
   const finais = [];
   for (const n of novos) {
@@ -2052,13 +2045,12 @@ function abreImportacao() {
     <h3>Importar do Places Been</h3>
     <p>Escolha o arquivo CSV exportado pelo Places Been. Nada é salvo antes de você confirmar.</p>
     <div class="campo"><label for="arq">Arquivo</label><input id="arq" type="file" accept=".csv,text/csv,text/plain"></div>
-    <label class="meta" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="portos" checked> Incluir os portos de Maceió e Buenos Aires (o arquivo não traz portos)</label>
     <div id="previa"></div>
     <div class="acoes"><button class="btn" id="i-fechar">Cancelar</button><button class="btn principal" id="i-ok" disabled>Importar</button></div>`, (m, fechar) => {
     let plano = null, linhas = null;
     const prever = () => {
       if (!linhas) return;
-      plano = preparaImportacao(linhas, m.querySelector('#portos').checked);
+      plano = preparaImportacao(linhas);
       const porTipo = {}; plano.inserir.forEach(f => porTipo[f.tipo] = (porTipo[f.tipo] || 0) + 1);
       const paises = new Set(plano.inserir.map(f => f.paisCalc).filter(Boolean)), estados = new Set(plano.inserir.map(f => f.estadoCalc).filter(Boolean));
       m.querySelector('#previa').innerHTML = `<div class="resumo-import">
@@ -2071,7 +2063,6 @@ function abreImportacao() {
       m.querySelector('#i-ok').disabled = !plano.inserir.length;
     };
     m.querySelector('#i-fechar').onclick = fechar;
-    m.querySelector('#portos').onchange = prever;
     m.querySelector('#arq').onchange = async e => {
       const f = e.target.files[0]; if (!f) return;
       try { linhas = lerCSV(await f.text()); try { await carregaMunicipios(); } catch {} prever(); }
@@ -2253,13 +2244,12 @@ function kmPorTransporte(ids) { // ids: viagens (todas se omitido)
   return tot;
 }
 const resumoTransportes = tot => [...tot].filter(([k]) => TRANSPORTES[k]).sort((a, b) => b[1] - a[1]).map(([k, km]) => `${TRANSPORTES[k][0]} ${fmtKm(Math.round(km))}`).join(' · ');
-// trajeto local: entre aeroporto/porto e um lugar a até 60 km (GRU–Guarulhos, MCZ–Maceió); não pergunta transporte
-const TERMINAIS = ['aeroporto', 'porto'];
+// trajeto local: entre aeroporto e um lugar a até 60 km (GRU–Guarulhos, MCZ–Maceió); não pergunta transporte
+const TERMINAIS = ['aeroporto'];
 const trechoLocal = (a, b) => (TERMINAIS.includes(a.tipo) || TERMINAIS.includes(b.tipo)) && a.tipo !== b.tipo && distKm(a.lat, a.lon, b.lat, b.lon) <= 60;
-// palpite inicial: aeroporto→aeroporto é avião; porto→porto é barco
+// palpite inicial: aeroporto→aeroporto é avião
 function palpiteTransporte(a, b) {
   if ((a.tipo === 'aeroporto' || b.tipo === 'aeroporto') && (a.tipo === b.tipo || distKm(a.lat, a.lon, b.lat, b.lon) > 150)) return 'aviao'; // saiu/chegou de aeroporto e foi longe
-  if (a.tipo === 'porto' && b.tipo === 'porto') return 'barco';
   return null;
 }
 const paradasDe = id => (S.paradas || []).filter(p => p.viagem_id === id).sort((a, b) => a.ordem - b.ordem);
@@ -2447,7 +2437,7 @@ function abreLinhaDoTempo() {
     m.querySelector('#lt-viagens').onclick = () => { fechar(); abreViagens(); };
     m.querySelectorAll('[data-vg]').forEach(b => b.onclick = () => { fechar(); editaViagem(S.viagens.find(x => x.id === b.dataset.vg), null, abreLinhaDoTempo); });
     m.querySelectorAll('[data-rota]').forEach(b => b.onclick = () => { fechar(); const vg = S.viagens.find(x => x.id === b.dataset.rota); mostraRoteiro(vg.nome, paradasDe(vg.id).map(p => ({ id: p.lugar_id, tr: p.transporte || null }))); });
-    m.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { fechar(); const l = porLugar.get(b.dataset.ir); S.aba = l.tipo === 'aeroporto' || l.tipo === 'porto' ? 'transporte' : l.tipo; atualizaTudo(); abreLugar(l.id); });
+    m.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { fechar(); const l = porLugar.get(b.dataset.ir); S.aba = l.tipo === 'aeroporto' ? 'transporte' : l.tipo; atualizaTudo(); abreLugar(l.id); });
   });
 }
 
@@ -2601,7 +2591,7 @@ function abreEstatisticas() {
   const ext = k => cidadesVis.reduce((m, l) => !m || k(l, m) ? l : m, null);
   const norte = ext((a, b) => a.lat > b.lat), sul = ext((a, b) => a.lat < b.lat), leste = ext((a, b) => a.lon > b.lon), oeste = ext((a, b) => a.lon < b.lon);
   const so = idsSoLugar(), porTipo = {}; S.lugares.filter(l => visitado(l.id, vis) || soLugar(l.id, so)).forEach(l => { const t = ehParque(l) ? 'parque' : l.tipo; porTipo[t] = (porTipo[t] || 0) + 1; });
-  const NOMES_T = { cidade: 'Cidades', unesco: 'Patrimônios UNESCO', aeroporto: 'Aeroportos', porto: 'Portos', atracao: 'Atrações', parque: 'Parques nacionais', museu: 'Museus' };
+  const NOMES_T = { cidade: 'Cidades', unesco: 'Patrimônios UNESCO', aeroporto: 'Aeroportos', atracao: 'Atrações', parque: 'Parques nacionais', museu: 'Museus' };
   const porRot = S.rotulos.map(r => [r, S.lugares.filter(l => rotulosDe(l.id).has(r.id)).length]);
   const capitais = CAPITAIS.filter(c => ibgeVis.has(c)).length;
   // países para a aba País: o da sua casa primeiro
@@ -2653,7 +2643,7 @@ function abreEstatisticas() {
       ${(() => { const maior = [...S.viagens].sort((a, b) => kmViagem(b.id) - kmViagem(a.id))[0]; return maior ? `<span>Mais longa: ${esc(maior.nome)}</span><b>${fmtKm(kmViagem(maior.id))}</b>` : ''; })()}
       <span>Voltas na Terra</span><b>${(S.viagens.reduce((t, vg) => t + kmViagem(vg.id), 0) / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b></div>
       <h4>Por meio de transporte</h4><div class="tabela">
-      ${(() => { const tot = kmPorTransporte(); return [...Object.keys(TRANSPORTES), 'local', 'sem'].filter(k => tot.get(k) >= 0.5).map(k => `<span>${k === 'sem' ? 'Trechos sem transporte marcado' : k === 'local' ? 'Trajetos até aeroportos e portos' : TRANSPORTES[k].join(' ')}</span><b>${fmtKm(Math.round(tot.get(k)))}</b>`).join(''); })()}</div>` : '<p class="meta">Nenhuma viagem registrada ainda. Crie em Menu › Viagens.</p>'}
+      ${(() => { const tot = kmPorTransporte(); return [...Object.keys(TRANSPORTES), 'local', 'sem'].filter(k => tot.get(k) >= 0.5).map(k => `<span>${k === 'sem' ? 'Trechos sem transporte marcado' : k === 'local' ? 'Trajetos até aeroportos' : TRANSPORTES[k].join(' ')}</span><b>${fmtKm(Math.round(tot.get(k)))}</b>`).join(''); })()}</div>` : '<p class="meta">Nenhuma viagem registrada ainda. Crie em Menu › Viagens.</p>'}
     </section>
     <div class="acoes"><button class="btn" id="st-fechar">Fechar</button></div>`, (m, fechar) => {
     m.querySelector('#st-fechar').onclick = fechar;
@@ -2673,7 +2663,7 @@ function abreEstatisticas() {
       try { localStorage.setItem('poa-st-pais', cc); } catch {}
       const ests = S.estados.filter(e => e.pais === cc), estsVis = ests.filter(e => estadosVis.has(e.id));
       const noPais = visitados.filter(l => l.pais === cc), cids = noPais.filter(l => l.tipo === 'cidade');
-      const conta = t => noPais.filter(l => (t === 'transporte' ? l.tipo === 'aeroporto' || l.tipo === 'porto' : l.tipo === t)).length;
+      const conta = t => noPais.filter(l => (t === 'transporte' ? l.tipo === 'aeroporto' : l.tipo === t)).length;
       const ehBR = cc === 'BR';
       box.innerHTML = `
         <h4>Estados e províncias</h4>
@@ -2685,7 +2675,7 @@ function abreEstatisticas() {
         ${ehBR ? '<h4>Municípios por estado</h4><div id="st-mun-uf"><p class="meta">Carregando…</p></div>' : ''}
         <h4>Patrimônios da UNESCO</h4><div id="st-unesco"><p class="meta">Carregando…</p></div>
         <h4>Outros lugares</h4><div class="tabela">
-          <span>Aeroportos e portos</span><b>${num(conta('transporte'))}</b>
+          <span>Aeroportos</span><b>${num(conta('transporte'))}</b>
           <span>Atrações e parques</span><b>${num(conta('atracao'))}</b>
           <span>Museus</span><b>${num(conta('museu'))}</b></div>`;
       (cc !== 'BR' ? carregaMundo() : carregaPop()).then(() => {
@@ -3173,7 +3163,7 @@ async function entrarPublico(token) {
     if (error) throw error;
     if (!data) { $('#carregando').innerHTML = '<div style="text-align:center;padding:24px"><b>Este link não está mais ativo.</b><br><a href="/">Ir para o Por Onde Andei</a></div>'; return; }
     S.rotulos = (data.rotulos || []).sort((a, b) => a.ordem - b.ordem);
-    S.lugares = data.lugares || []; S.visitas = [];
+    S.lugares = (data.lugares || []).map(l => l.tipo === 'porto' ? { ...l, tipo: 'atracao' } : l); S.visitas = [];
     S.lr = new Map(); for (const x of data.marcas || []) { if (!S.lr.has(x.lugar_id)) S.lr.set(x.lugar_id, new Map()); S.lr.get(x.lugar_id).set(x.rotulo_id, null); }
     S.nomePublico = data.nome || '';
     document.title = S.nomePublico ? `Viagens de ${S.nomePublico}` : 'Por Onde Andei';
