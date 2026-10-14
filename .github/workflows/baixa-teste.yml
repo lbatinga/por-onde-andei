@@ -1,0 +1,23 @@
+name: Baixa dados para teste
+on:
+  push:
+    branches: [dados-teste]
+    paths: ['.github/workflows/baixa-teste.yml']
+permissions:
+  contents: write
+jobs:
+  baixa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir -p tmp && cd tmp
+          UA="PorOndeAndei/1.0 (https://github.com/lbatinga/por-onde-andei)"
+          for p in List_of_the_busiest_airports_in_Latin_America List_of_the_busiest_airports_in_Asia List_of_the_busiest_airports_in_Africa List_of_the_busiest_airports_in_the_Middle_East List_of_the_busiest_airports_in_Europe List_of_busiest_airports_in_North_America List_of_the_busiest_airports_in_Oceania; do
+            curl -sSL -A "$UA" "https://en.wikipedia.org/api/rest_v1/page/html/$p" -o "$p.html"; sleep 1; done
+          curl -sSL -A "$UA" "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/avia_paoa?format=JSON&unit=PAS&tra_meas=PAS_CRD&freq=A&schedule=TOTAL&tra_cov=TOTAL&sinceTimePeriod=2023" -o eurostat.json
+          curl -sSL -A "$UA" https://davidmegginson.github.io/ourairports-data/airports.csv -o airports.csv
+          ls -la
+      - run: |
+          git config user.name "Claude"; git config user.email "noreply@anthropic.com"
+          git add tmp && git commit -m "dados de teste" && git push
