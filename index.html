@@ -796,7 +796,8 @@ async function todos(montar) {
   for (;;) {
     const { data, error } = await montar().range(de, de + 999);
     if (error) throw error;
-    out = out.concat(data); if (data.length < 1000) break; de += 1000;
+    const lista = Array.isArray(data) ? data : []; // resposta inesperada não trava o carregamento
+    out = out.concat(lista); if (lista.length < 1000) break; de += 1000;
   }
   return out;
 }
