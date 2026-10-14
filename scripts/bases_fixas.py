@@ -1,6 +1,7 @@
 """Atualiza as listas de apoio do app Por Onde Andei.
 
-aeroportos.json: aeroportos grandes e médios com voo comercial regular e código IATA (OurAirports).
+aeroportos.json: aeroportos grandes e médios com voo comercial regular e código IATA (OurAirports),
+  [IATA, nome, lat, lon, país, cidade, grande, ICAO]; o ICAO liga os voos do VRA da ANAC.
   Mantém os nomes em português já existentes; aeroporto novo ganha o nome em português pela
   Wikidata (rótulo pt), ou o do OurAirports se a Wikidata não tiver. Quem perdeu o voo regular sai.
 municipios-br.json: municípios do IBGE [código, nome, UF, lat, lon]. Atualiza nomes; município novo
@@ -58,8 +59,9 @@ def aeroportos():
         i = x["iata_code"]
         nome, cidade = (atual[i][1], atual[i][5]) if i in atual else (
             (pt.get(i) or [None, None])[0] or x["name"], (pt.get(i) or [None, None])[1] or x["municipality"])
+        icao = x.get("icao_code") or x.get("gps_code") or (x["ident"] if len(x["ident"]) == 4 else "")
         saida.append([i, nome, round(float(x["latitude_deg"]), 4), round(float(x["longitude_deg"]), 4),
-                      x["iso_country"], cidade, 1 if x["type"] == "large_airport" else 0])
+                      x["iso_country"], cidade, 1 if x["type"] == "large_airport" else 0, icao])
     saida.sort(key=lambda a: a[0])
     sairam = sorted(set(atual) - {a[0] for a in saida})
     print("Aeroportos", len(saida), "novos", novos, "saíram", sairam, file=sys.stderr)
