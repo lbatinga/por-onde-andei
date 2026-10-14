@@ -2549,9 +2549,9 @@ async function calculaSelos() {
 const GLOBO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>';
 const METROPOLE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M4 21V11h4v10M10 21V4h4v17M16 21V8h4v13"/></svg>';
 const faltaTexto = s => s.prox ? `${NOME_NIVEL[s.prox[1]].toLowerCase()} com ${num(s.prox[0])}` : (s.diamante ? 'completo!' : 'nível máximo');
-function htmlSelos(lista) {
+function htmlSelos(lista, todos) {
   const grupos = [];
-  lista.forEach(s => { let g = grupos.find(x => x[0] === s.grupo); if (!g) grupos.push(g = [s.grupo, []]); g[1].push(s); });
+  lista.filter(s => todos || s.nivel).forEach(s => { let g = grupos.find(x => x[0] === s.grupo); if (!g) grupos.push(g = [s.grupo, []]); g[1].push(s); });
   const cartao = s => {
     const alvo = s.total || s.degraus[s.degraus.length - 1][0], p = Math.min(100, Math.round(s.n / alvo * 100));
     return `<div class="sl" data-selo="${esc(s.id)}"><div class="med ${s.atual || 'nenhum'}">${s.icone}</div>
@@ -2563,6 +2563,8 @@ function htmlSelos(lista) {
   const perto = lista.filter(s => s.prox).map(s => ({ s, f: (s.prox[0] - s.n) / s.prox[0] })).sort((a, b) => a.f - b.f)[0]?.s;
   const conquistados = lista.reduce((t, s) => t + s.nivel, 0);
   return `<div class="selos-resumo"><b>${conquistados}</b><span>${conquistados === 1 ? 'nível conquistado' : 'níveis conquistados'}${perto ? ` · o próximo mais perto: <strong>${esc(perto.nome)}, ${NOME_NIVEL[perto.prox[1]].toLowerCase()}</strong> (${perto.prox[0] - perto.n === 1 ? 'falta 1' : 'faltam ' + num(perto.prox[0] - perto.n)})` : ''}</span></div>
+    <label class="meta" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="selos-todos" ${todos ? 'checked' : ''}> Mostrar também os que ainda não têm selo</label>
+    ${grupos.length ? '' : '<p class="meta">Nenhum selo ainda. Marque a caixa para ver o que falta.</p>'}
     ${grupos.map(([g, ss]) => `<h4>${esc(g)}</h4><div class="sl-grade">${ss.map(cartao).join('')}</div>`).join('')}
     <div class="selos-escala"><b>Coleções de até ${COLECAO_GRANDE}</b>: bronze 25% · prata 50% · ouro 75% · 💎 100%<br>
     <b>Coleções maiores</b>: cobre 5% · bronze 15% · prata 30% · ouro 60% · platina 90% · 💎 100%<br>
@@ -2711,7 +2713,14 @@ function abreEstatisticas() {
     };
     m.querySelectorAll('[data-st-pais]').forEach(b => b.onclick = () => desenhaPais(b.dataset.stPais));
     if (paisesStats.length) desenhaPais((() => { try { const p = localStorage.getItem('poa-st-pais'); return paisesStats.includes(p) ? p : paisesStats[0]; } catch { return paisesStats[0]; } })());
-    calculaSelos().then(lista => { const box = m.querySelector('#st-selos'); if (box) box.innerHTML = htmlSelos(lista); }).catch(() => { const box = m.querySelector('#st-selos'); if (box) box.innerHTML = '<p class="meta">Não foi possível calcular os selos.</p>'; });
+    calculaSelos().then(lista => {
+      const box = m.querySelector('#st-selos'); if (!box) return;
+      const desenha = todos => {
+        box.innerHTML = htmlSelos(lista, todos);
+        box.querySelector('#selos-todos').onchange = e => { try { localStorage.setItem('poa-selos-todos', e.target.checked ? '1' : '0'); } catch {} desenha(e.target.checked); };
+      };
+      desenha((() => { try { return localStorage.getItem('poa-selos-todos') === '1'; } catch { return false; } })());
+    }).catch(() => { const box = m.querySelector('#st-selos'); if (box) box.innerHTML = '<p class="meta">Não foi possível calcular os selos.</p>'; });
     // ranking dos seus aeroportos: Brasil (ANAC) e mundo (top 50 do ACI)
     carregaRanking().then(rk => {
       const box = m.querySelector('#st-aero'); if (!box) return;
