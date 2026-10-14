@@ -263,6 +263,31 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .st-paises button { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: .88rem; cursor: pointer; color: var(--ink); }
 .st-paises button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .st-abas { margin: 10px 0 4px; position: sticky; top: -1px; z-index: 2; }
+/* selos */
+.selos-resumo { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border-radius: 12px; padding: 10px 12px; margin: 10px 0 4px; }
+.selos-resumo b { font-size: 1.5rem; font-weight: 800; color: var(--visit); }
+.selos-resumo span { color: var(--muted); font-size: .85rem; }
+.sl-grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.sl { border: 1px solid var(--line); border-radius: 14px; padding: 10px 4px 9px; text-align: center; background: var(--surface); min-width: 0; }
+.sl .med { width: 50px; height: 50px; margin: 0 auto 5px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.sl .med svg { width: 23px; height: 23px; }
+.med.cobre { background: radial-gradient(circle at 35% 30%, #d7895f, #9a4f2c); box-shadow: 0 0 0 3px #eccdbd; }
+.med.bronze { background: radial-gradient(circle at 35% 30%, #e3a26b, #b5733e); box-shadow: 0 0 0 3px #f1d9c4; }
+.med.prata { background: radial-gradient(circle at 35% 30%, #d5dde2, #8e9aa3); box-shadow: 0 0 0 3px #e6eaed; }
+.med.ouro { background: radial-gradient(circle at 35% 30%, #f5d76e, #d4a017); box-shadow: 0 0 0 3px #f6e8b8; }
+.med.platina { background: radial-gradient(circle at 35% 30%, #f2f6f8, #9fb4c2); box-shadow: 0 0 0 3px #e3ecf1; color: #46606f; }
+.med.diamante { background: radial-gradient(circle at 35% 30%, #c9f3ff, #3fb7e0); box-shadow: 0 0 0 3px #c8eefa; }
+.med.nenhum { background: var(--surface-2); color: var(--muted); box-shadow: 0 0 0 3px var(--line); opacity: .75; }
+.sl .niveis { display: flex; justify-content: center; gap: 3px; margin: 3px 0 4px; }
+.sl .niveis i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.sl .niveis i.on { background: var(--visit); }
+.sl .niveis i.d { border-radius: 1px; transform: rotate(45deg) scale(.85); }
+.sl b { display: block; font-size: .8rem; line-height: 1.15; overflow-wrap: anywhere; }
+.sl small { display: block; font-size: .7rem; color: var(--muted); margin-top: 3px; line-height: 1.25; }
+.sl .prog { height: 5px; background: var(--surface-2); border-radius: 9px; margin: 6px 6px 0; overflow: hidden; }
+.sl .prog i { display: block; height: 100%; background: var(--visit); border-radius: 9px; }
+.selos-escala { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .78rem; color: var(--muted); margin-top: 14px; line-height: 1.5; }
+.selos-escala b { color: var(--ink); }
 .aero-lista { display: grid; gap: 0; margin: 4px 0 6px; }
 .aero-linha { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .aero-linha:last-child { border-bottom: 0; }
@@ -1283,6 +1308,7 @@ function abreExtras() {
 }
 function atualizaTudo() {
   agendaCopia();
+  agendaSelos();
   const c = calcula();
   if (camadaPaises) { ajustaCamadaEstados(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); desenhaPinos(); }
   document.querySelectorAll('.rot-mapa div[data-pais]').forEach(d => d.parentElement.classList.toggle('visitado', paisesVis.has(d.dataset.pais)));
@@ -2454,6 +2480,110 @@ async function salvaCasa(id) {
   if (error) return toast('Erro: ' + error.message);
   S.config = { ...(S.config || {}), casa_lugar_id: id || null }; salvaCopia();
 }
+// ---- Selos: coleções com total (pequenas: 3 níveis + 💎; grandes: 5 níveis + 💎) e marcos por contagem
+const NOME_NIVEL = { cobre: 'Cobre', bronze: 'Bronze', prata: 'Prata', ouro: 'Ouro', platina: 'Platina', diamante: 'Diamante' };
+const ESCALA_PEQ = [[.25, 'bronze'], [.5, 'prata'], [.75, 'ouro'], [1, 'diamante']];
+const ESCALA_GRD = [[.05, 'cobre'], [.15, 'bronze'], [.3, 'prata'], [.6, 'ouro'], [.9, 'platina'], [1, 'diamante']];
+const COLECAO_GRANDE = 50; // acima disso, a coleção usa a escala de 5 níveis
+const MARCOS = { cidades: [10, 25, 50, 100, 250], aeroportos: [3, 5, 10, 25, 50], metropoles: [1, 3, 5, 10, 25] };
+const NIVEIS_MARCO = ['cobre', 'bronze', 'prata', 'ouro', 'platina'];
+function selo(id, grupo, icone, nome, n, total, marcos) {
+  let degraus;
+  if (marcos) degraus = marcos.map((q, i) => [q, NIVEIS_MARCO[i]]);
+  else {
+    let ant = 0;
+    degraus = (total > COLECAO_GRANDE ? ESCALA_GRD : ESCALA_PEQ).map(([p, nv]) => { const q = p === 1 ? total : Math.max(ant + 1, Math.ceil(p * total)); ant = q; return [q, nv]; });
+  }
+  const nivel = degraus.filter(([q]) => n >= q).length; // quantos degraus já subiu
+  return { id, grupo, icone, nome, n, total, degraus, nivel, atual: nivel ? degraus[nivel - 1][1] : null, prox: degraus[nivel] || null, diamante: !marcos };
+}
+// calcula todos os selos; o que depende de arquivo (ranking, população, municípios) entra se carregar
+async function calculaSelos() {
+  const c = calcula(), vis = idsVisita();
+  const visitados = S.lugares.filter(l => visitado(l.id, vis));
+  const cidadesVis = visitados.filter(l => l.tipo === 'cidade');
+  const lista = [];
+  const conts = new Map();
+  S.paises.forEach(p => { const k = CONTINENTES[p.continente] || 'Outros'; if (!conts.has(k)) conts.set(k, 0); if (paisesVis.has(p.id)) conts.set(k, conts.get(k) + 1); });
+  conts.delete('Outros');
+  lista.push(selo('paises', 'Mundo', ICONES.pais, 'Países', paisesVis.size, S.paises.length));
+  lista.push(selo('continentes', 'Mundo', GLOBO, 'Continentes', [...conts.values()].filter(Boolean).length, conts.size));
+  const temAero = S.lugares.some(l => l.tipo === 'aeroporto');
+  if (temAero) {
+    try {
+      const rk = await carregaRanking();
+      const gig = new Set(rk.posMundo.keys());
+      new Set([...rk.posNac.keys(), ...rk.posCont.keys()]).forEach(i => { if ((paxDe(i)?.pax || 0) >= 15e6) gig.add(i); });
+      const meus = new Set(S.lugares.filter(l => l.tipo === 'aeroporto' && (l.ref_externa || '').startsWith('iata:') && (visitado(l.id, vis) || soLugar(l.id, idsSoLugar()))).map(l => l.ref_externa.slice(5)));
+      lista.push(selo('aero-gigantes', 'Mundo', ICONES.aeroporto, 'Aeroportos muito grandes', [...meus].filter(i => gig.has(i)).length, gig.size));
+    } catch {}
+  }
+  lista.push(selo('cidades', 'Marcos', ICONES.cidade, 'Cidades', c.cidade, null, MARCOS.cidades));
+  lista.push(selo('aeroportos', 'Marcos', ICONES.aeroporto, 'Aeroportos', c.aeroporto, null, MARCOS.aeroportos));
+  try {
+    await (cidadesVis.some(l => l.pais && l.pais !== 'BR') ? carregaMundo() : carregaPop());
+    lista.push(selo('metropoles', 'Marcos', METROPOLE, 'Metrópoles (1 mi+)', cidadesVis.filter(l => porteCidade(l) === 'muito').length, null, MARCOS.metropoles));
+  } catch {}
+  // no seu país: estados de qualquer país; no Brasil, também regiões e capitais
+  const pc = casa()?.pais || 'BR', g = `No seu país · ${nomePais(pc)}`;
+  const ests = S.estados.filter(e => e.pais === pc);
+  if (ests.length) lista.push(selo('estados-' + pc, g, ICONES.estado, pc === 'BR' ? 'Estados' : 'Estados e províncias', ests.filter(e => estadosVis.has(e.id)).length, ests.length));
+  const ibgeVis = new Set(cidadesVis.filter(l => l.ref_externa?.startsWith('ibge:')).map(l => l.ref_externa.slice(5)));
+  if (pc === 'BR') {
+    const ufs = new Set([...estadosVis].filter(e => e.startsWith('BR-')).map(e => e.slice(3)));
+    lista.push(selo('regioes-BR', g, GLOBO, 'Regiões', Object.values(REGIOES_BR).filter(u => u.some(x => ufs.has(x))).length, 5));
+    lista.push(selo('capitais-BR', g, ICONES.cidade, 'Capitais', CAPITAIS.filter(x => ibgeVis.has(x)).length, 27));
+  }
+  // municípios: um selo por estado brasileiro onde você já esteve (estado com menos de 5 municípios fica de fora)
+  if (ibgeVis.size) {
+    try {
+      const mun = await carregaMunicipios();
+      const tot = new Map(), feitos = new Map();
+      mun.forEach(x => tot.set(x.uf, (tot.get(x.uf) || 0) + 1));
+      ibgeVis.forEach(cod => { const x = S.munPorCod.get(cod); if (x) feitos.set(x.uf, (feitos.get(x.uf) || 0) + 1); });
+      [...feitos].filter(([uf]) => tot.get(uf) >= 5).sort((a, b) => b[1] / tot.get(b[0]) - a[1] / tot.get(a[0])).forEach(([uf, n]) => lista.push(selo('mun-' + uf, 'Municípios por estado', ICONES.estado, nomeEstado('BR-' + uf) || uf, n, tot.get(uf))));
+    } catch {}
+  }
+  return lista;
+}
+const GLOBO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>';
+const METROPOLE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M4 21V11h4v10M10 21V4h4v17M16 21V8h4v13"/></svg>';
+const faltaTexto = s => s.prox ? `${NOME_NIVEL[s.prox[1]].toLowerCase()} com ${num(s.prox[0])}` : (s.diamante ? 'completo!' : 'nível máximo');
+function htmlSelos(lista) {
+  const grupos = [];
+  lista.forEach(s => { let g = grupos.find(x => x[0] === s.grupo); if (!g) grupos.push(g = [s.grupo, []]); g[1].push(s); });
+  const cartao = s => {
+    const alvo = s.total || s.degraus[s.degraus.length - 1][0], p = Math.min(100, Math.round(s.n / alvo * 100));
+    return `<div class="sl" data-selo="${esc(s.id)}"><div class="med ${s.atual || 'nenhum'}">${s.icone}</div>
+      <div class="niveis">${s.degraus.map(([, nv], i) => `<i class="${i < s.nivel ? 'on' : ''}${nv === 'diamante' ? ' d' : ''}"></i>`).join('')}</div>
+      <b>${esc(s.nome)}</b><small>${s.atual ? NOME_NIVEL[s.atual] + ' · ' : ''}${num(s.n)}${s.total ? ' de ' + num(s.total) : ''} · ${faltaTexto(s)}</small>
+      <div class="prog"><i style="width:${Math.max(p, 2)}%"></i></div></div>`;
+  };
+  // o mais perto: menor proporção que falta para o próximo nível
+  const perto = lista.filter(s => s.prox).map(s => ({ s, f: (s.prox[0] - s.n) / s.prox[0] })).sort((a, b) => a.f - b.f)[0]?.s;
+  const conquistados = lista.reduce((t, s) => t + s.nivel, 0);
+  return `<div class="selos-resumo"><b>${conquistados}</b><span>${conquistados === 1 ? 'nível conquistado' : 'níveis conquistados'}${perto ? ` · o próximo mais perto: <strong>${esc(perto.nome)}, ${NOME_NIVEL[perto.prox[1]].toLowerCase()}</strong> (${perto.prox[0] - perto.n === 1 ? 'falta 1' : 'faltam ' + num(perto.prox[0] - perto.n)})` : ''}</span></div>
+    ${grupos.map(([g, ss]) => `<h4>${esc(g)}</h4><div class="sl-grade">${ss.map(cartao).join('')}</div>`).join('')}
+    <div class="selos-escala"><b>Coleções de até ${COLECAO_GRANDE}</b>: bronze 25% · prata 50% · ouro 75% · 💎 100%<br>
+    <b>Coleções maiores</b>: cobre 5% · bronze 15% · prata 30% · ouro 60% · platina 90% · 💎 100%<br>
+    <b>Marcos</b>: 5 níveis por quantidade, sem diamante. Muito grande: aeroporto no top 50 do mundo ou com 15 milhões de passageiros ou mais.</div>`;
+}
+// avisa quando um selo sobe de nível (guarda o último nível de cada um neste aparelho)
+let tSelos;
+function agendaSelos() {
+  if (S.publico || !S.user) return;
+  clearTimeout(tSelos); tSelos = setTimeout(verificaSelos, 1500);
+}
+async function verificaSelos() {
+  const chave = 'poa-selos-' + S.user.id;
+  let antes = null; try { antes = JSON.parse(localStorage.getItem(chave) || 'null'); } catch {}
+  const lista = await calculaSelos();
+  const agora = { ...(antes || {}) }; lista.forEach(s => agora[s.id] = s.nivel);
+  try { localStorage.setItem(chave, JSON.stringify(agora)); } catch {}
+  if (!antes) return; // primeira vez neste aparelho: só registra
+  const subiram = lista.filter(s => s.nivel > (antes[s.id] ?? 0)).sort((a, b) => b.nivel - a.nivel);
+  if (subiram.length) toast(`🏅 Novo selo: ${subiram[0].nome} · ${NOME_NIVEL[subiram[0].atual]}${subiram.length > 1 ? ` (e mais ${subiram.length - 1})` : ''}`, 4000);
+}
 function abreEstatisticas() {
   calcula();
   const vis = idsVisita(), visitados = S.lugares.filter(l => visitado(l.id, vis));
@@ -2491,7 +2621,7 @@ function abreEstatisticas() {
     </div>
     <p class="meta">A área soma cada estado ou província onde você esteve, inteiro: passar por Manaus conta o Amazonas todo.</p>
     <div class="abas-band st-abas" role="tablist">
-      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="pais">País</button><button role="tab" data-st="aero">Aeroportos</button>${(S.viagens || []).length >= 3 ? '<button role="tab" data-st="viagens">Viagens</button>' : ''}
+      <button role="tab" data-st="geral">Geral</button><button role="tab" data-st="pais">País</button><button role="tab" data-st="aero">Aeroportos</button><button role="tab" data-st="selos">Selos</button>${(S.viagens || []).length >= 3 ? '<button role="tab" data-st="viagens">Viagens</button>' : ''}
     </div>
     <section data-st-sec="geral">
       <h4>Por continente</h4>
@@ -2512,6 +2642,7 @@ function abreEstatisticas() {
       <div class="st-paises">${paisesStats.map(p => `<button data-st-pais="${p}">${bandeira(p)} ${esc(nomePais(p))}</button>`).join('')}</div>
       <div id="st-pais"></div>
     </section>
+    <section data-st-sec="selos" hidden><div id="st-selos"><p class="meta">Carregando…</p></div></section>
     <section data-st-sec="aero" hidden><div id="st-aero"><p class="meta">Carregando…</p></div></section>
     <section data-st-sec="viagens" hidden>
     ${(S.viagens || []).length ? `<div class="tabela">
@@ -2580,6 +2711,7 @@ function abreEstatisticas() {
     };
     m.querySelectorAll('[data-st-pais]').forEach(b => b.onclick = () => desenhaPais(b.dataset.stPais));
     if (paisesStats.length) desenhaPais((() => { try { const p = localStorage.getItem('poa-st-pais'); return paisesStats.includes(p) ? p : paisesStats[0]; } catch { return paisesStats[0]; } })());
+    calculaSelos().then(lista => { const box = m.querySelector('#st-selos'); if (box) box.innerHTML = htmlSelos(lista); }).catch(() => { const box = m.querySelector('#st-selos'); if (box) box.innerHTML = '<p class="meta">Não foi possível calcular os selos.</p>'; });
     // ranking dos seus aeroportos: Brasil (ANAC) e mundo (top 50 do ACI)
     carregaRanking().then(rk => {
       const box = m.querySelector('#st-aero'); if (!box) return;
