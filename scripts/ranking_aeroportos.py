@@ -235,6 +235,24 @@ def main():
         if anterior.get("reino_unido"):
             saida["reino_unido"] = anterior["reino_unido"]
     try:
+        html = requests.get(regioes.FAA_PAGINA, headers={**UA, "Accept": "text/html"}, timeout=60).text
+        ano_us, link = regioes.link_faa(html, ano_max)
+        if not link:
+            raise RuntimeError("planilha da FAA não encontrada")
+        lids = {row["local_code"]: row["iata_code"] for row in oa if row["iso_country"] == "US" and row["local_code"] and row["iata_code"]}
+        lista_us, sem = regioes.parse_faa(requests.get(link, headers=UA, timeout=120).content, lids)
+        if sem:
+            print("FAA sem código IATA:", sem[:20], file=sys.stderr)
+        if len(lista_us) < 100:
+            raise RuntimeError(f"FAA veio com só {len(lista_us)} aeroportos")
+        saida["eua"] = {"ano": ano_us, "fonte": "FAA (embarques; total estimado em 2x)", "estimado": True,
+                        "lista": [{"pos": pos, "iata": iata, "pax": emb * 2, "embarques": emb} for pos, iata, emb in lista_us]}
+        print("FAA ano", ano_us, "aeroportos", len(lista_us), file=sys.stderr)
+    except Exception as e:
+        print("FAA falhou:", e, file=sys.stderr)
+        if anterior.get("eua"):
+            saida["eua"] = anterior["eua"]
+    try:
         txt = requests.get(regioes.EUROSTAT, headers=UA, timeout=180).text
         ano_eu, lista_eu = regioes.parse_eurostat(txt, por_icao)
         if not ano_eu:

@@ -246,3 +246,56 @@ def parse_caa(texto):
         lista.append((iata, pax))
     lista.sort(key=lambda x: -x[1])
     return ano, lista, sem
+
+
+# EUA: FAA, embarques (enplanements) por aeroporto de serviço comercial, ano fechado. A FAA conta só
+# quem embarca; o ranking (posição) é o oficial, e o total de passageiros fica estimado em 2x os embarques.
+FAA_PAGINA = "https://www.faa.gov/airports/planning_capacity/passenger_allcargo_stats/passenger"
+
+
+def link_faa(html, ano_max):
+    """Link do .xlsx final (não preliminar) mais recente até ano_max."""
+    achados = []
+    for m in re.finditer(r'href="([^"]*arp-cy(20\d\d)-commercial-service-enplanements(-preliminary)?\.xlsx)"', html):
+        if not m.group(3) and int(m.group(2)) <= ano_max:
+            href = m.group(1)
+            achados.append((int(m.group(2)), href if href.startswith("http") else "https://www.faa.gov" + href))
+    return max(achados) if achados else (None, None)
+
+
+def parse_faa(conteudo, iata_por_lid):
+    """xlsx da FAA -> [(pos, iata, embarques)] na ordem do ranking oficial."""
+    import io, openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
+    ws = wb.worksheets[0]
+    cab, lista, sem = None, [], []
+    for row in ws.iter_rows(values_only=True):
+        cel = [str(c).strip() if c is not None else "" for c in row]
+        if cab is None:
+            baixo = [c.lower() for c in cel]
+            if any("locid" in c for c in baixo) and any("enplanement" in c for c in baixo):
+                cab = baixo
+                i_rank = next((i for i, c in enumerate(cab) if c.startswith("rank")), None)
+                i_lid = next(i for i, c in enumerate(cab) if "locid" in c)
+                i_emb = next(i for i, c in enumerate(cab) if "enplanement" in c)   # primeira coluna = ano mais recente
+            continue
+        if len(cel) <= max(i_lid, i_emb) or not cel[i_lid]:
+            continue
+        try:
+            emb = int(float(cel[i_emb].replace(",", "")))
+        except ValueError:
+            continue
+        lid = cel[i_lid].upper()
+        iata = iata_por_lid.get(lid) or (lid if re.fullmatch(r"[A-Z]{3}", lid) else None)
+        if not iata:
+            sem.append(lid)
+            continue
+        try:
+            pos = int(float(cel[i_rank])) if i_rank is not None and cel[i_rank] else None
+        except ValueError:
+            pos = None
+        lista.append([pos, iata, emb])
+    lista.sort(key=lambda x: -x[2])
+    for i, x in enumerate(lista):
+        x[0] = x[0] or i + 1
+    return lista, sem
