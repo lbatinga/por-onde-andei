@@ -302,6 +302,8 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .menu-link { display: block; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); color: var(--accent); font-weight: 700; text-decoration: none; }
 .publico .busca, .publico .fab { display: none !important; }
 .grupo-pinos { background: none; border: 0; }
+.mais-opcoes { border: 0; background: none; color: var(--muted); font: 700 1.3rem/1 var(--f-body); padding: 4px 6px; cursor: pointer; border-radius: 8px; flex: none; }
+.mais-opcoes:active { background: var(--surface-2); }
 .grupo-pinos div.so-quero { background: var(--surface); color: var(--ink); border: 3px solid var(--want); }
 .grupo-pinos div { width: 36px; height: 36px; border-radius: 50%; background: var(--visit); color: #fff; font: 700 13px/36px var(--f-body); text-align: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
 .filtro-rot, .filtro-limpa { border: 1px solid transparent; background: none; color: var(--muted); font-size: .8rem; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 99px; }
@@ -1300,6 +1302,7 @@ function linhaLugar(l) {
   const estiloTipo = l.tipo === 'unesco' ? ` style="color:#fff;border:0;background:${fundoCat(catDe(l.ref_externa))}"` : '';
   return `<div class="item"><span class="tipo"${estiloTipo}${attrPorte(l)}>${iconeDe(l)}</span>
     <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : ehParque(l) ? 'Parque nacional' : '', local || TIPOS[l.tipo].um, l.tipo === 'cidade' && popCidade(l) ? fmtHab(popCidade(l).pop) + ' hab.' : ''].filter(Boolean).join(' · '))}</small></button>
+    ${S.publico ? '' : `<button class="mais-opcoes" data-editar-lugar="${l.id}" aria-label="Editar ${esc(l.nome)}" title="Editar">⋯</button>`}
     <div class="marcas">${marcas}</div></div>`;
 }
 // A lista mostra só o que está visível no mapa (como no Places Been)
@@ -1685,6 +1688,12 @@ async function excluiLugar(id) {
       if (vis.length) await supa.from('viagem_visitas').insert(vis.map(v => ({ lugar_id: id, data: v.data, precisao: v.precisao, nota: v.nota || null })));
       await carregaDados(); atualizaTudo(); toast(`${copia.nome} voltou`);
     } });
+}
+// Toque na lista: só leva até o lugar e mostra o balãozinho de resumo (sem abrir o cadastro)
+function mostraNoMapa(id) {
+  const l = S.lugares.find(x => x.id === id); if (!l) return;
+  centraVisivel([l.lat, l.lon], Math.max(mapa.getZoom(), l.tipo === 'pais' ? 4 : 11));
+  setTimeout(() => resumoLugar(l, { getLatLng: () => L.latLng(l.lat, l.lon) }), 250);
 }
 function abreLugar(id) {
   const l = S.lugares.find(x => x.id === id); if (!l) return;
@@ -2174,7 +2183,7 @@ function resumoLugar(l, marcador) {
     ${S.publico ? '' : '<div class="resumo-foto"></div>'}
     ${S.publico ? '' : `<button class="btn principal" data-editar="${l.id}">Editar</button>`}
   </div>`;
-  const pop = L.popup({ closeButton: true, autoPanPadding: [20, 60], className: 'pop-resumo' }).setLatLng(marcador.getLatLng()).setContent(html).openOn(mapa);
+  const pop = L.popup({ closeButton: true, autoPanPaddingTopLeft: [20, 60], autoPanPaddingBottomRight: [20, alturaLista() + 20], className: 'pop-resumo' }).setLatLng(marcador.getLatLng()).setContent(html).openOn(mapa);
   setTimeout(() => { const b = pop.getElement()?.querySelector('[data-editar]'); if (b) b.onclick = () => { mapa.closePopup(); abreLugar(l.id); }; }, 0);
   if (!S.publico) listaFotos(l.id).then(fotos => {
     const box = pop.getElement()?.querySelector('.resumo-foto'); if (!box || !fotos.length) return;
@@ -2979,7 +2988,8 @@ function montaApp() {
     const mk = e.target.closest('.marca');
     if (mk) { if (S.publico) return; return mk.dataset.base ? marcaBase(mk.dataset.base, mk.dataset.r) : alternaRotulo(mk.dataset.l, mk.dataset.r); }
     const abb = e.target.closest('[data-abrir-base]'); if (abb) return abreBase(abb.dataset.abrirBase);
-    const ab = e.target.closest('[data-abrir]'); if (ab) return abreLugar(ab.dataset.abrir);
+    const ed = e.target.closest('[data-editar-lugar]'); if (ed) return abreLugar(ed.dataset.editarLugar);
+    const ab = e.target.closest('[data-abrir]'); if (ab) return mostraNoMapa(ab.dataset.abrir);
     if (e.target.closest('[data-add-pais]')) { const b = $('#busca'); b.focus(); b.placeholder = 'Digite o nome do país…'; return; }
     const zp = e.target.closest('[data-zoom-pais]'); if (zp) { const p = S.paisPorId.get(zp.dataset.zoomPais); if (p) mapa.fitBounds([[p.maior[1], p.maior[0]], [p.maior[3], p.maior[2]]]); return; }
     const ze = e.target.closest('[data-zoom-estado]'); if (ze) { const p = S.estadoPorId.get(ze.dataset.zoomEstado); if (p) mapa.fitBounds([[p.bbox[1], p.bbox[0]], [p.bbox[3], p.bbox[2]]]); }
