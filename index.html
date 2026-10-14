@@ -3510,10 +3510,59 @@ function resumoCarteira() {
     longo: longo && kmVoo(longo) ? `${longo.origem} → ${longo.destino} · ${fmtKm(kmVoo(longo))}` : '',
     avioes: [...mods].sort((a, b) => b[1] - a[1]).map(([m, n]) => `${m} ×${n}`).join(' · ') };
 }
+// capa do cartão (1032×336): texto à esquerda e o mapa das rotas à direita, enquadrado só onde você voou
+async function capaCarteira(vs) {
+  const W = 1032, H = 336, MW = 620, MH = H; // área do mapa
+  const aps = [...new Set(vs.flatMap(v => [v.origem, v.destino]))].map(aeroPorIata).filter(Boolean);
+  if (!aps.length) return null;
+  let x0 = Math.min(...aps.map(a => a.lon)), x1 = Math.max(...aps.map(a => a.lon)), y0 = Math.min(...aps.map(a => a.lat)), y1 = Math.max(...aps.map(a => a.lat));
+  const k = Math.cos((y0 + y1) / 2 * Math.PI / 180);
+  const m = Math.max((x1 - x0) * k, y1 - y0) * 0.16 + 1.5; x0 -= m / k; x1 += m / k; y0 -= m; y1 += m;
+  // ajusta à proporção da área do mapa
+  let w = (x1 - x0) * k, h = y1 - y0; const alvo = MW / MH;
+  if (w / h < alvo) { const d = (h * alvo - w) / 2 / k; x0 -= d; x1 += d; w = h * alvo; } else { const d = (w / alvo - h) / 2; y0 -= d; y1 += d; h = w / alvo; }
+  const px = lon => W - MW + (lon - x0) * k / w * MW, py = lat => (y1 - lat) / h * MH;
+  const visto = new Set(aps.map(a => a.pais));
+  const paises = S.paises.filter(p => p.bbox[2] > x0 && p.bbox[0] < x1 && p.bbox[3] > y0 && p.bbox[1] < y1).map(p => `<path fill="${visto.has(p.id) ? '#245f62' : '#174448'}" stroke="#2c6a6d" stroke-width="1" d="${p.polys.map(poly => poly.map(anel => 'M' + anel.map(([x, y]) => px(x).toFixed(1) + ',' + py(y).toFixed(1)).join('L') + 'Z').join('')).join('')}"/>`).join('');
+  const rotas = new Map(); vs.forEach(v => { const c = [v.origem, v.destino].sort().join('-'); rotas.set(c, (rotas.get(c) || 0) + 1); });
+  const arcos = [...rotas].map(([c, n]) => { const [a, b] = c.split('-').map(aeroPorIata); if (!a || !b) return '';
+    const xa = px(a.lon), ya = py(a.lat), xb = px(b.lon), yb = py(b.lat), cx = (xa + xb) / 2 - (yb - ya) * 0.18, cy = (ya + yb) / 2 + (xb - xa) * 0.18;
+    return `<path fill="none" stroke="#e4572e" stroke-linecap="round" stroke-width="${Math.min(3 + n * 1.6, 11)}" opacity=".9" d="M${xa.toFixed(1)},${ya.toFixed(1)}Q${cx.toFixed(1)},${cy.toFixed(1)} ${xb.toFixed(1)},${yb.toFixed(1)}"/>`; }).join('');
+  const pontos = aps.map(a => `<circle cx="${px(a.lon).toFixed(1)}" cy="${py(a.lat).toFixed(1)}" r="8" fill="#f2e8d5" stroke="#0c2a2e" stroke-width="3"/><text x="${(px(a.lon) + 13).toFixed(1)}" y="${(py(a.lat) + 7).toFixed(1)}" font-family="system-ui,sans-serif" font-weight="800" font-size="20" fill="#f2e8d5" stroke="#0c2a2e" stroke-width="5" paint-order="stroke">${esc(a.iata)}</text>`).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <defs><radialGradient id="g" cx="85%" cy="0%" r="120%"><stop offset="0" stop-color="#1d5b62"/><stop offset=".55" stop-color="#123a3f"/><stop offset="1" stop-color="#0c2a2e"/></radialGradient>
+    <linearGradient id="f" x1="0" x2="1"><stop offset="0" stop-color="#123a3f"/><stop offset="1" stop-color="#123a3f" stop-opacity="0"/></linearGradient>
+    <clipPath id="c"><rect x="${W - MW}" y="0" width="${MW}" height="${H}"/></clipPath></defs>
+    <rect width="${W}" height="${H}" fill="url(#g)"/>
+    <g clip-path="url(#c)">${paises}${arcos}${pontos}</g>
+    <rect x="${W - MW}" y="0" width="180" height="${H}" fill="url(#f)"/>
+    <text x="56" y="128" font-family="system-ui,sans-serif" font-weight="700" font-size="22" letter-spacing="6" fill="#d9b45a">PASSAPORTE DE VOOS</text>
+    <text x="56" y="182" font-family="system-ui,sans-serif" font-weight="800" font-size="44" fill="#f2e8d5">POR ONDE ANDEI</text>
+    <text x="56" y="232" font-family="system-ui,sans-serif" font-weight="600" font-size="22" fill="#b9d3d0">${vs.length} ${vs.length === 1 ? 'voo' : 'voos'} · ${aps.length} aeroportos</text></svg>`;
+  const img = new Image();
+  await new Promise((ok, falha) => { img.onload = ok; img.onerror = falha; img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; cv.getContext('2d').drawImage(img, 0, 0);
+  return await new Promise(ok => cv.toBlob(ok, 'image/png'));
+}
+async function enviaCapa(resumo) { // grava a capa no servidor só quando muda (rotas ou aeroportos)
+  try {
+    const vs = S.voos || [], chave = [...new Set(vs.map(v => [v.origem, v.destino].sort().join('-')))].sort().join(',') + '|' + vs.length;
+    let ant = null; try { ant = JSON.parse(localStorage.getItem('poa-capa') || 'null'); } catch {}
+    if (ant && ant.chave === chave) return ant.url;
+    const blob = await capaCarteira(vs); if (!blob) return null;
+    const caminho = `${S.user.id}/capa.png`;
+    const { error } = await supa.storage.from('carteira').upload(caminho, blob, { upsert: true, contentType: 'image/png', cacheControl: '60' });
+    if (error) return null;
+    const url = supa.storage.from('carteira').getPublicUrl(caminho).data.publicUrl + '?v=' + Date.now().toString(36);
+    try { localStorage.setItem('poa-capa', JSON.stringify({ chave, url })); } catch {}
+    return url;
+  } catch { return null; }
+}
 async function adicionaCarteira(botao) {
   await carregaBase('aeroporto').catch(() => {});
   const resumo = resumoCarteira(); if (!resumo) return toast('Cadastre um voo primeiro.');
   botao.disabled = true; const txt = botao.innerHTML; botao.textContent = 'Preparando o cartão…';
+  resumo.capa = await enviaCapa();
   const { data, error } = await supa.functions.invoke('carteira', { body: { acao: 'link', resumo } });
   botao.disabled = false; botao.innerHTML = txt;
   if (error || !data?.url) {
@@ -3530,6 +3579,7 @@ function agendaCarteira() {
   if (!antes || S.publico || !S.user) return;
   clearTimeout(tCarteira); tCarteira = setTimeout(async () => {
     const resumo = resumoCarteira(); if (!resumo) return;
+    resumo.capa = await enviaCapa();
     const novo = JSON.stringify(resumo); if (novo === antes) return;
     const { error } = await supa.functions.invoke('carteira', { body: { acao: 'atualizar', resumo } });
     if (!error) try { localStorage.setItem('poa-carteira', novo); } catch {}
