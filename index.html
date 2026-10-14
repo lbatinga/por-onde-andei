@@ -1010,7 +1010,7 @@ function carregaBase(tipo) {
     .then(rows => (S.baseAtr = semDuplicados(rows.map(r => ({ ref: (r.tipo === 'parque' ? 'parque:' : 'wd:') + r.qid, tipo: 'atracao', nome: r.nome, lat: r.lat, lon: r.lon, pais: r.pais, grande: r.relevancia >= 60 ? 1 : 0, rel: r.relevancia, sub: [r.tipo === 'parque' ? 'Parque nacional' : 'Atração', nomePais(r.pais)].filter(Boolean).join(' · ') })))))
     .catch(e => { basePromessa.atr = null; throw e; });
   if (tipo === 'aeroporto') return basePromessa.aero ||= fetch('aeroportos.json').then(r => r.json())
-    .then(rows => (S.baseAero = rows.map(([iata, nome, lat, lon, cc, cidade, grande]) => ({ ref: 'iata:' + iata, tipo: 'aeroporto', nome, lat, lon, pais: cc, iata, grande, sub: `${iata} · ${[cidade, nomePais(cc)].filter(Boolean).join(', ')}` }))))
+    .then(rows => (S.baseAero = rows.map(([iata, nome, lat, lon, cc, cidade, grande, icao]) => ({ ref: 'iata:' + iata, tipo: 'aeroporto', nome, lat, lon, pais: cc, iata, icao: icao || null, grande, sub: `${iata} · ${[cidade, nomePais(cc)].filter(Boolean).join(', ')}` }))))
     .catch(e => { basePromessa.aero = null; throw e; });
   if (tipo === 'museu') return basePromessa.museu ||= fetch('museus.json').then(r => r.json())
     .then(rows => (S.baseMuseu = rows.map(([cod, nome, lat, lon, mun, uf]) => ({ ref: 'ibram:' + cod, tipo: 'museu', nome, lat, lon, pais: 'BR', municipio: mun, uf, sub: [mun, uf].filter(Boolean).join(' · ') }))))
@@ -3178,7 +3178,7 @@ function abreVoos() {
           <small>${esc([new Date(v.data + 'T12:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }), cidadeAero(v.origem) && cidadeAero(v.destino) ? `${cidadeAero(v.origem)} → ${cidadeAero(v.destino)}` : '', v.modelo, v.matricula].filter(Boolean).join(' · '))}</small></span></button>`).join('')}`).join('')
         : '<p class="meta">Nenhum voo ainda. Toque em “Novo voo”: com o número e a data, o app busca o resto.</p>';
       const inc = incompletos();
-      if (inc.length) m.querySelector('#vo-corpo').insertAdjacentHTML('afterbegin', `<div class="sugestao"><span><b>${inc.length} ${inc.length === 1 ? 'voo recente sem' : 'voos recentes sem'} avião ou matrícula</b><small>A busca alcança cerca de 1 ano para trás.</small></span><button class="btn" id="vo-completar">Completar</button></div>`);
+      if (inc.length) m.querySelector('#vo-corpo').insertAdjacentHTML('afterbegin', `<div class="sugestao"><span><b>${inc.length} ${inc.length === 1 ? 'voo com dados faltando' : 'voos com dados faltando'}</b><small>Último ano: avião e matrícula. Mais antigos no Brasil: horários e avião pela ANAC.</small></span><button class="btn" id="vo-completar">Completar</button></div>`);
       const bc = m.querySelector('#vo-completar'); if (bc) bc.onclick = () => completaVoos(bc, () => m._depois ? m._depois() : desenhar(m));
       m.querySelectorAll('[data-voo]').forEach(b => b.onclick = () => editaVoo(S.voos.find(x => x.id === b.dataset.voo), () => m._depois ? m._depois() : desenhar(m)));
     };
@@ -3200,16 +3200,21 @@ function abreVoos() {
   });
 }
 // voos do último ano com número, mas sem avião ou matrícula: a busca ainda alcança
-const incompletos = () => (S.voos || []).filter(v => v.numero && (!v.modelo || !v.matricula) && Date.now() - Date.parse(v.data) < 360 * 864e5);
+const recente = v => Date.now() - Date.parse(v.data) < 355 * 864e5;
+const semAnac = () => { try { return new Set(JSON.parse(localStorage.getItem('poa-sem-anac') || '[]')); } catch { return new Set(); } };
+const incompletos = () => { const tentados = semAnac(); return (S.voos || []).filter(v => v.numero && (recente(v) ? (!v.modelo || !v.matricula) : (!v.modelo || !v.minutos) && v.data >= '2000-01-01' && !tentados.has(v.id))); };
 async function completaVoos(botao, depois) {
   const lista = incompletos(); let feitos = 0, achou = 0;
   botao.disabled = true;
+  const tentados = semAnac();
   for (const v of lista) {
-    botao.textContent = `${++feitos} de ${lista.length}…`;
+    botao.textContent = `${++feitos} de ${lista.length}…${recente(v) ? '' : ' (ANAC, pode demorar)'}`;
     let ts; try { ts = await buscaVoo(v.numero, v.data); } catch (e) { toast(e.message, 4000); break; }
     const t = ts.find(x => x.origem === v.origem && x.destino === v.destino) || (ts.length === 1 ? ts[0] : null);
-    if (!t) continue;
+    if (!t) { if (!recente(v)) tentados.add(v.id); continue; }
     const novo = {}; // só preenche o que está vazio
+    if (!v.partida && t.partida) novo.partida = t.partida;
+    if (!v.chegada && t.chegada) novo.chegada = t.chegada;
     if (!v.modelo && t.modelo) novo.modelo = t.modelo;
     if (!v.matricula && t.matricula) novo.matricula = t.matricula;
     if (!v.minutos && t.minutos) novo.minutos = t.minutos;
@@ -3218,6 +3223,7 @@ async function completaVoos(botao, depois) {
     const { error } = await grava({ tipo: 'atualizar', tabela: 'viagem_voos', valores: novo, filtro: { id: v.id } });
     if (!error) { Object.assign(v, novo); achou++; }
   }
+  try { localStorage.setItem('poa-sem-anac', JSON.stringify([...tentados])); } catch {}
   toast(achou ? `${achou} ${achou === 1 ? 'voo completado' : 'voos completados'}` : 'A busca não trouxe avião nem matrícula para esses voos', 4000);
   atualizaTudo(); depois?.();
 }
@@ -3229,7 +3235,15 @@ async function buscaVoo(numero, data) {
     if (corpo?.erro === 'pedido_invalido') throw new Error('Confira o número (ex.: G31673) e a data.');
     throw new Error('Não deu para buscar agora. Preencha à mão ou tente mais tarde.');
   }
-  return r?.trechos || [];
+  const ts = r?.trechos || [];
+  if (r?.fonte !== 'anac') return ts;
+  await carregaBase('aeroporto').catch(() => {});
+  const modelos = await carregaModelos().catch(() => []);
+  const porIcao = new Map((S.baseAero || []).filter(b => b.icao).map(b => [b.icao, b.iata]));
+  // "TAM LINHAS AÉREAS S.A." → "TAM"; "AZUL LINHAS AÉREAS BRASILEIRAS S.A." → "Azul"
+  const nomeEpoca = e => { if (!e) return null; let n = e.replace(/\(.*?\)/g, '').replace(/\b(LINHAS A[ÉE]REAS|TRANSPORTES A[ÉE]REOS|BRASILEIRAS|S\.?\s?A\.?|LTDA\.?|INC\.?|AIRLINES?|LINEAS AEREAS)\b/gi, '').replace(/[\s,.-]+$/, '').trim(); return n.length <= 3 ? n.toUpperCase() : n.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()); };
+  return ts.map(t => ({ ...t, origem: porIcao.get(t.origem_icao) || null, destino: porIcao.get(t.destino_icao) || null,
+    modelo: (t.modelo_icao && modelos.find(m => m[2] === t.modelo_icao)?.[0]) || t.modelo_icao || null, cia_nome: nomeEpoca(t.empresa) })).filter(t => t.origem && t.destino);
 }
 function editaVoo(v, aoSalvar) {
   const novo = !v; v = v || { data: new Date().toISOString().slice(0, 10) };
@@ -3251,7 +3265,7 @@ function editaVoo(v, aoSalvar) {
         ${vgs.length ? `<div class="campo"><label for="vf-vg">Viagem</label><select id="vf-vg"><option value="">Nenhuma</option>${vgs.map(x => `<option value="${x.id}" ${v.viagem_id === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></div>` : ''}
         <div class="campo"><label for="vf-notas">Notas</label><input id="vf-notas" value="${esc(v.notas || '')}"></div>
       </div>
-      <p class="meta">A busca usa dados da <a href="https://aerodatabox.com" target="_blank" rel="noopener">AeroDataBox</a> e alcança até 1 ano para trás.</p>
+      <p class="meta">A busca usa a <a href="https://aerodatabox.com" target="_blank" rel="noopener">AeroDataBox</a> no último ano e os registros da ANAC para voos mais antigos no Brasil (sem matrícula).</p>
       <div class="acoes">${novo ? '' : '<button class="btn perigo" id="vf-apagar">Excluir</button>'}<button class="btn" id="vf-cancelar">Cancelar</button><button class="btn principal" id="vf-salvar">Salvar</button></div>`, (m, fechar) => {
       const $m = s => m.querySelector(s);
       let minutos = v.minutos || null, ciaNome = v.cia_nome || null;
@@ -3269,10 +3283,12 @@ function editaVoo(v, aoSalvar) {
         nomeAero($m('#vf-org'), '#vf-org-n'); nomeAero($m('#vf-dst'), '#vf-dst-n'); nomeDaCia(); $m('#vf-trechos').innerHTML = '';
       };
       $m('#vf-buscar').onclick = async () => {
-        const b = $m('#vf-buscar'), caixa = $m('#vf-trechos'); b.disabled = true; caixa.innerHTML = '<p class="meta">Buscando…</p>';
+        const b = $m('#vf-buscar'), caixa = $m('#vf-trechos'); b.disabled = true;
+        const velho = Date.now() - Date.parse($m('#vf-data').value) > 355 * 864e5;
+        caixa.innerHTML = `<p class="meta">${velho ? 'Buscando nos registros da ANAC (voos no Brasil desde 2000). Pode levar até 1 minuto…' : 'Buscando…'}</p>`;
         try {
           const ts = await buscaVoo($m('#vf-num').value, $m('#vf-data').value);
-          if (!ts.length) caixa.innerHTML = '<p class="meta">Voo não encontrado nessa data. A busca alcança cerca de 1 ano para trás; voos mais antigos entram à mão.</p>';
+          if (!ts.length) caixa.innerHTML = `<p class="meta">${velho ? 'Não achei esse voo nos registros da ANAC. Eles só têm voos que passam pelo Brasil, desde 2000; fora disso, preencha à mão.' : 'Voo não encontrado nessa data. Confira o número e a data.'}</p>`;
           else if (ts.length === 1) preenche(ts[0]);
           else { // voo com escala: mesmo número em mais de um trecho
             caixa.innerHTML = `<p class="meta">Esse número tem ${ts.length} trechos. Qual foi o seu?</p><div class="menu-lista">${ts.map((t, i) => `<button data-tr="${i}">${esc(t.origem)} → ${esc(t.destino)}<small>${esc([t.partida, t.modelo].filter(Boolean).join(' · '))}</small></button>`).join('')}</div>`;
@@ -3470,7 +3486,7 @@ async function htmlPassaporte() {
     <h4 class="pp-h">Companhias</h4>${companhias}
     <h4 class="pp-h">Aviões <small>toque para ver as fotos</small></h4>${aviaoHtml}
     <h4 class="pp-h">Por viagem</h4>${viagens}
-    <p class="meta pp-nota">Distâncias em linha reta pela curva da Terra.${estimado ? ' Sem horário registrado, o tempo é estimado pela distância.' : ''} Fotos: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a> (pela matrícula) ou Wikipédia (pelo modelo), com o crédito de cada foto. Logos das companhias: Travelpayouts. Busca de voos: AeroDataBox.</p>`;
+    <p class="meta pp-nota">Distâncias em linha reta pela curva da Terra.${estimado ? ' Sem horário registrado, o tempo é estimado pela distância.' : ''} Fotos: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a> (pela matrícula) ou Wikipédia (pelo modelo), com o crédito de cada foto. Logos das companhias: Travelpayouts. Busca de voos: AeroDataBox e ANAC (VRA).</p>`;
 }
 // depois de desenhar: carrega as fotos (uma por matrícula)
 function carregaFotos(caixa) {
