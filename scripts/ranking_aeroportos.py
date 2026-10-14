@@ -145,8 +145,20 @@ def mundo():
     raise SystemExit("tabela do ranking mundial não encontrada")
 
 
+def com_tentativas(fn, n=3):
+    """A ANAC às vezes corta o download de 360 MB no meio: tenta de novo."""
+    for i in range(n):
+        try:
+            return fn()
+        except (requests.exceptions.RequestException, ValueError) as e:
+            print(f"tentativa {i + 1} falhou:", e, file=sys.stderr)
+            if i == n - 1:
+                raise
+            __import__("time").sleep(30)
+
+
 def main():
-    ano_br, atualizado, lista_br, nomes = brasil()
+    ano_br, atualizado, lista_br, nomes = com_tentativas(brasil)
     iata = iata_por_icao()
     br = [{"pos": i + 1, "icao": icao, "iata": iata.get(icao), "nome": nomes.get(icao, icao).title(), "pax": round(v)}
           for i, (icao, v) in enumerate(lista_br)]
