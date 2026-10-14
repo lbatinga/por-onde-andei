@@ -3110,6 +3110,9 @@ function abreVoos() {
           <span class="voo-info"><b>${esc([v.numero, nomeCia(v, cias)].filter(Boolean).join(' · '))}</b>
           <small>${esc([new Date(v.data + 'T12:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }), cidadeAero(v.origem) && cidadeAero(v.destino) ? `${cidadeAero(v.origem)} → ${cidadeAero(v.destino)}` : '', v.modelo, v.matricula].filter(Boolean).join(' · '))}</small></span></button>`).join('')}`).join('')
         : '<p class="meta">Nenhum voo ainda. Toque em “Novo voo”: com o número e a data, o app busca o resto.</p>';
+      const inc = incompletos();
+      if (inc.length) m.querySelector('#vo-corpo').insertAdjacentHTML('afterbegin', `<div class="sugestao"><span><b>${inc.length} ${inc.length === 1 ? 'voo recente sem' : 'voos recentes sem'} avião ou matrícula</b><small>A busca alcança cerca de 1 ano para trás.</small></span><button class="btn" id="vo-completar">Completar</button></div>`);
+      const bc = m.querySelector('#vo-completar'); if (bc) bc.onclick = () => completaVoos(bc, () => desenhar(m));
       m.querySelectorAll('[data-voo]').forEach(b => b.onclick = () => editaVoo(S.voos.find(x => x.id === b.dataset.voo), () => desenhar(m)));
     };
     abreModal(`<h3>Voos</h3><div id="vo-corpo"></div>
@@ -3119,6 +3122,28 @@ function abreVoos() {
       desenhar(m);
     });
   });
+}
+// voos do último ano com número, mas sem avião ou matrícula: a busca ainda alcança
+const incompletos = () => (S.voos || []).filter(v => v.numero && (!v.modelo || !v.matricula) && Date.now() - Date.parse(v.data) < 360 * 864e5);
+async function completaVoos(botao, depois) {
+  const lista = incompletos(); let feitos = 0, achou = 0;
+  botao.disabled = true;
+  for (const v of lista) {
+    botao.textContent = `${++feitos} de ${lista.length}…`;
+    let ts; try { ts = await buscaVoo(v.numero, v.data); } catch (e) { toast(e.message, 4000); break; }
+    const t = ts.find(x => x.origem === v.origem && x.destino === v.destino) || (ts.length === 1 ? ts[0] : null);
+    if (!t) continue;
+    const novo = {}; // só preenche o que está vazio
+    if (!v.modelo && t.modelo) novo.modelo = t.modelo;
+    if (!v.matricula && t.matricula) novo.matricula = t.matricula;
+    if (!v.minutos && t.minutos) novo.minutos = t.minutos;
+    if (!v.cia_nome && t.cia_nome) novo.cia_nome = t.cia_nome;
+    if (!Object.keys(novo).length) continue;
+    const { error } = await grava({ tipo: 'atualizar', tabela: 'viagem_voos', valores: novo, filtro: { id: v.id } });
+    if (!error) { Object.assign(v, novo); achou++; }
+  }
+  toast(achou ? `${achou} ${achou === 1 ? 'voo completado' : 'voos completados'}` : 'A busca não trouxe avião nem matrícula para esses voos', 4000);
+  atualizaTudo(); depois?.();
 }
 async function buscaVoo(numero, data) {
   const { data: r, error } = await supa.functions.invoke('voo', { body: { numero, data } });
