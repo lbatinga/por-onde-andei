@@ -226,6 +226,11 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .ano b { text-align: right; } .ano-barra { height: 10px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
 .ano-barra div { height: 100%; background: var(--visit); border-radius: 99px; }
 .casa-campo { margin-bottom: 6px; }
+.rank-form { display: grid; gap: 2px; margin: -4px 0 12px; padding: 8px 12px; border-radius: var(--r); background: var(--surface-2); border-left: 4px solid var(--line); }
+.rank-form small { color: var(--muted); }
+.rank-form[data-porte] { border-left-color: var(--porte-grande); }
+.rank-form[data-porte="medio"] { border-left-color: var(--porte-medio); }
+.rank-form[data-porte="pequeno"] { border-left-color: var(--porte-pequeno); }
 :root { --porte-grande: #d6453d; --porte-medio: #e0a526; --porte-pequeno: #8a9a9b; }
 .item .tipo[data-porte] { border: 2.5px solid var(--porte-grande); }
 .item .tipo[data-porte="medio"] { border-color: var(--porte-medio); }
@@ -937,6 +942,18 @@ function porteAero(x) {
   const br = rankingAero.posNac.get(iata) || rankingAero.posCont.get(iata); if (!br) return null;
   return br.pax >= 15e6 ? 'muito' : br.pax >= 5e6 ? 'grande' : br.pax >= 1e6 ? 'medio' : 'pequeno';
 }
+// posições de um aeroporto em texto curto: "🌎 50º · Am. Latina 1º · 🇧🇷 1º"
+const REG_CURTO = { america_latina: 'Am. Latina', america_norte: 'Am. do Norte', europa: 'Europa', asia: 'Ásia', oriente_medio: 'Or. Médio', africa: 'África' };
+function rankingTexto(x) {
+  const ref = x.ref_externa || x.ref || ''; if (!rankingAero || !ref.startsWith('iata:')) return '';
+  const iata = ref.slice(5), m = rankingAero.posMundo.get(iata), c = rankingAero.posCont.get(iata), n = rankingAero.posNac.get(iata);
+  return [m && `🌎 ${m}º`, c && `${REG_CURTO[c.reg] || ''} ${c.pos}º`, n && `${bandeira(n.pais)} ${n.pos}º`].filter(Boolean).join(' · ');
+}
+function paxTexto(x) {
+  const ref = x.ref_externa || x.ref || ''; if (!rankingAero || !ref.startsWith('iata:')) return '';
+  const iata = ref.slice(5), d = rankingAero.posNac.get(iata) || rankingAero.posCont.get(iata);
+  return d ? `${(d.pax / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} milhões de passageiros por ano` : '';
+}
 const attrPorte = x => { const p = porteAero(x); return p ? ` data-porte="${p}" title="${PORTES[p]}"` : ''; };
 const lugarDaRef = ref => S.lugares.find(l => l.ref_externa === ref);
 function linhaBase(b) {
@@ -944,7 +961,7 @@ function linhaBase(b) {
   const estiloTipo = b.tipo === 'unesco' ? ` style="color:${CATEGORIAS[b.cat].cor};border-color:${CATEGORIAS[b.cat].cor}"` : '';
   const estiloT = estiloTipo || (b.tipo === 'atracao' ? ` style="color:${corBase(b)};border-color:${corBase(b)}"` : '');
   return `<div class="item base"><span class="tipo"${estiloT}${attrPorte(b)}>${iconeDe(b)}</span>
-    <button class="txt" data-abrir-base="${esc(b.ref)}"><b>${esc(b.nome)}</b><small>${esc(b.sub || '')}</small></button>
+    <button class="txt" data-abrir-base="${esc(b.ref)}"><b>${esc(b.nome)}</b><small>${esc([b.sub, b.tipo === 'aeroporto' ? rankingTexto(b) : ''].filter(Boolean).join(' · '))}</small></button>
     <div class="marcas">${marcas}</div></div>`;
 }
 const acharBase = ref => (ref.startsWith('unesco:') ? S.baseUnesco : ref.startsWith('iata:') ? S.baseAero : ref.startsWith('ibram:') ? S.baseMuseu : S.baseAtr)?.find(b => b.ref === ref);
@@ -1328,6 +1345,7 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
   const chips = S.rotulos.map(r => `<button type="button" class="chip" style="--c:${esc(r.cor)}" data-r="${r.id}" aria-pressed="${rotSel.has(r.id)}" ${rotuloServe(r, l.tipo || 'cidade') || rotSel.has(r.id) ? '' : 'hidden'}>${esc(r.nome)}</button>`).join('');
   abreModal(`
     <h3>${esc(titulo)}</h3>
+    ${l.tipo === 'aeroporto' && rankingTexto(l) ? `<div class="rank-form"${attrPorte(l)}><b>${esc(rankingTexto(l))}</b><small>${esc([PORTES[porteAero(l)], paxTexto(l)].filter(Boolean).join(' · '))}</small></div>` : ''}
     ${sugestoes ? `<div class="campo"><span class="rotulo-campo">Sugestões de nome</span><div class="chips">${sugestoes.map(s => `<button type="button" class="chip sug" style="--c:var(--map-border)" data-s="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>` : ''}
     <div class="linha">
       <div class="campo" style="flex-basis:220px"><label for="f-nome">Nome</label><input id="f-nome" value="${esc(l.nome || '')}" placeholder="Ex.: Praia do Gunga"></div>
@@ -1612,6 +1630,12 @@ function ligaResultados(box, mundo) {
     const ja = S.lugares.find(l => norm(l.nome) === norm(nome) && distKm(l.lat, l.lon, lat, lon) < 15);
     if (ja) return abreLugar(ja.id);
     const dados = { lat, lon, tipo: tipoDoResultado(x), nome, pais: (x.address?.country_code || '').toUpperCase() };
+    // aeroporto da busca: usa o da base oficial mais próximo (vem com código, ranking e porte)
+    if (dados.tipo === 'aeroporto') return carregaBase('aeroporto').then(base => {
+      const perto = base.map(b => [b, distKm(lat, lon, b.lat, b.lon)]).filter(([, d]) => d < 5).sort((a, b) => a[1] - b[1])[0];
+      if (perto) return abreBase(perto[0].ref);
+      novoLugar(dados);
+    }).catch(() => novoLugar(dados));
     confereMuseuOficial(dados).then(ok => ok && novoLugar(dados));
   });
 }
