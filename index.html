@@ -3012,7 +3012,13 @@ async function geraCard() {
   const vis = idsVisita(), cont = { cidade: 0, unesco: 0, aeroporto: 0, atracao: 0 };
   const so = idsSoLugar();
   S.lugares.forEach(l => { if ((visitado(l.id, vis) || soLugar(l.id, so)) && l.tipo in cont) cont[l.tipo]++; });
-  const itens = [[cont.cidade, 'cidades'], [cont.unesco, 'patrimônios UNESCO'], [cont.aeroporto, 'aeroportos'], [cont.atracao, 'atrações e parques']];
+  // núcleo do app: cidades, aeroportos, estados do país de casa e municípios (fora do Brasil, continentes)
+  const pc = (!S.publico && casa()?.pais) || 'BR', ests = S.estados.filter(e => e.pais === pc);
+  const mun = new Set(S.lugares.filter(l => l.tipo === 'cidade' && l.ref_externa?.startsWith('ibge:') && visitado(l.id, vis)).map(l => l.ref_externa));
+  const conts = new Set(S.paises.filter(p => paisesVis.has(p.id)).map(p => CONTINENTES[p.continente]).filter(Boolean));
+  const itens = [[cont.cidade, 'cidades'], [cont.aeroporto, 'aeroportos'],
+    [`${ests.filter(e => estadosVis.has(e.id)).length}/${ests.length}`, `estados ${pc === 'BR' ? 'do Brasil' : 'de ' + nomePais(pc)}`],
+    mun.size ? [mun.size, 'municípios do Brasil'] : [conts.size, conts.size === 1 ? 'continente' : 'continentes']];
   const by = my + mh + 50, bw = (W - 120 - 30) / 2, bh = 150;
   itens.forEach(([n, t], i) => {
     const x = 60 + (i % 2) * (bw + 30), y = by + Math.floor(i / 2) * (bh + 30);
