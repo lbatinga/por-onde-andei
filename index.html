@@ -1232,6 +1232,46 @@ function iniciaMapa() {
   // segurar o dedo: se for em cima de um ícone, usa o nome dele; senão, cadastro pelo endereço
   mapa.on('contextmenu', e => { if (poiNoPonto(e)) return tocaIconeDoMapa(e); novoLugarEm(e.latlng.lat, e.latlng.lng); });
 }
+// Municípios marcados pintados no mapa (Brasil): contorno do IBGE, um arquivo por estado, baixado só quando precisa
+const UF_IBGE = { 11: 'RO', 12: 'AC', 13: 'AM', 14: 'RR', 15: 'PA', 16: 'AP', 17: 'TO', 21: 'MA', 22: 'PI', 23: 'CE', 24: 'RN', 25: 'PB', 26: 'PE', 27: 'AL', 28: 'SE', 29: 'BA', 31: 'MG', 32: 'ES', 33: 'RJ', 35: 'SP', 41: 'PR', 42: 'SC', 43: 'RS', 50: 'MS', 51: 'MT', 52: 'GO', 53: 'DF' };
+let camadaMun = null;
+const malhas = new Map(); // UF -> Map(código -> feição) | Promise | 'erro'
+function municipiosMarcados() { // código IBGE -> 'v' (esteve) ou 'q' (quero ir); escala não pinta
+  const vis = idsVisita(), so = idsSoLugar(), m = new Map();
+  for (const l of S.lugares) {
+    if (l.tipo !== 'cidade' || !l.ref_externa?.startsWith('ibge:') || !S.lr.has(l.id)) continue;
+    const cod = l.ref_externa.slice(5);
+    if (visitado(l.id, vis)) m.set(cod, { st: 'v', l }); else if (!soLugar(l.id, so) && !m.has(cod)) m.set(cod, { st: 'q', l });
+  }
+  return m;
+}
+function carregaMalha(uf) {
+  if (malhas.has(uf)) return;
+  malhas.set(uf, fetch(`malhas/${uf}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(fc => { malhas.set(uf, new Map(fc.features.map(f => [String(f.properties.cod), f]))); desenhaMunicipios(); })
+    .catch(() => malhas.set(uf, 'erro')));
+}
+function desenhaMunicipios() {
+  if (!mapa) return;
+  if (!camadaMun) camadaMun = L.geoJSON(null, { interactive: false, style: f => estiloMun(f.properties.st) });
+  const z = mapa.getZoom();
+  if (z < 6 || abaDeRegiao()) { camadaMun.remove(); return; }
+  const marc = municipiosMarcados(), vista = mapa.getBounds().pad(0.3), feicoes = [];
+  const porUF = new Map();
+  marc.forEach((x, cod) => { const uf = UF_IBGE[cod.slice(0, 2)]; if (uf && vista.contains([x.l.lat, x.l.lon])) porUF.set(uf, true); });
+  porUF.forEach((_, uf) => {
+    const m = malhas.get(uf);
+    if (!m) return carregaMalha(uf);
+    if (!(m instanceof Map)) return;
+    marc.forEach((x, cod) => { const f = m.get(cod); if (f) feicoes.push({ ...f, properties: { cod, st: x.st } }); });
+  });
+  camadaMun.clearLayers(); camadaMun.addData(feicoes);
+  if (!mapa.hasLayer(camadaMun)) camadaMun.addTo(mapa);
+}
+function estiloMun(st) {
+  const cor = st === 'v' ? corToken('--visit') : corToken('--want'), z = mapa ? mapa.getZoom() : 8;
+  return { stroke: true, color: cor, weight: z >= 9 ? 1.5 : 1, opacity: 0.9, dashArray: st === 'q' ? '4 4' : null, fill: true, fillColor: cor, fillOpacity: st === 'v' ? (z >= 10 ? 0.18 : 0.32) : 0.08 };
+}
 function ajustaCamadaEstados() {
   if (!mapa || !camadaEstados) return;
   if (mapa.getZoom() >= 4 || S.aba === 'estados') { if (!mapa.hasLayer(camadaEstados)) camadaEstados.addTo(mapa); }
@@ -1309,7 +1349,7 @@ function atualizaTudo() {
   agendaCopia();
   agendaSelos();
   const c = calcula();
-  if (camadaPaises) { ajustaCamadaEstados(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); desenhaPinos(); }
+  if (camadaPaises) { ajustaCamadaEstados(); camadaPaises.setStyle(estiloPais); camadaEstados.setStyle(estiloEstado); desenhaPinos(); desenhaMunicipios(); }
   document.querySelectorAll('.rot-mapa div[data-pais]').forEach(d => d.parentElement.classList.toggle('visitado', paisesVis.has(d.dataset.pais)));
   const totalPaises = S.paises.length;
   // núcleo do app em destaque; UNESCO, atrações e museus ficam juntos no último botão
@@ -2973,13 +3013,31 @@ async function geraCard() {
   const so = idsSoLugar();
   S.lugares.forEach(l => { if ((visitado(l.id, vis) || soLugar(l.id, so)) && l.tipo in cont) cont[l.tipo]++; });
   const itens = [[cont.cidade, 'cidades'], [cont.unesco, 'patrimônios UNESCO'], [cont.aeroporto, 'aeroportos'], [cont.atracao, 'atrações e parques']];
-  const by = my + mh + 60, bw = (W - 120 - 30) / 2, bh = 190;
+  const by = my + mh + 50, bw = (W - 120 - 30) / 2, bh = 150;
   itens.forEach(([n, t], i) => {
     const x = 60 + (i % 2) * (bw + 30), y = by + Math.floor(i / 2) * (bh + 30);
     c.fillStyle = '#0e2c30'; caixa(x, y, bw, bh, 24); c.fill();
-    c.fillStyle = '#f2e8d5'; c.font = `800 92px ${fd}`; c.fillText(String(n), x + 34, y + 110);
-    c.fillStyle = '#9fc3c0'; c.font = `500 32px ${fb}`; c.fillText(t, x + 34, y + 158);
+    c.fillStyle = '#f2e8d5'; c.font = `800 76px ${fd}`; c.fillText(String(n), x + 34, y + 86);
+    c.fillStyle = '#9fc3c0'; c.font = `500 30px ${fb}`; c.fillText(t, x + 34, y + 128);
   });
+  // os 3 selos mais altos
+  try {
+    const ORD = ['cobre', 'bronze', 'prata', 'ouro', 'platina', 'diamante'];
+    const COR = { cobre: ['#d7895f', '#9a4f2c'], bronze: ['#e3a26b', '#b5733e'], prata: ['#e4e9ec', '#8e9aa3'], ouro: ['#f5d76e', '#d4a017'], platina: ['#f2f6f8', '#9fb4c2'], diamante: ['#c9f3ff', '#3fb7e0'] };
+    const top = (await calculaSelos()).filter(x => x.atual).sort((a, b) => ORD.indexOf(b.atual) - ORD.indexOf(a.atual) || b.n / (b.total || b.degraus.at(-1)[0]) - a.n / (a.total || a.degraus.at(-1)[0])).slice(0, 3);
+    if (top.length) {
+      const sy = by + 2 * bh + 30 + 40, sw = (W - 120) / 3;
+      top.forEach((x, i) => {
+        const cx = 60 + i * sw + 44, cy = sy + 44, g = c.createRadialGradient(cx - 14, cy - 14, 4, cx, cy, 44);
+        g.addColorStop(0, COR[x.atual][0]); g.addColorStop(1, COR[x.atual][1]);
+        c.fillStyle = g; c.beginPath(); c.arc(cx, cy, 40, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#123a3f'; c.font = `800 30px ${fd}`; c.textAlign = 'center'; c.fillText(x.atual === 'diamante' ? '◆' : '★', cx, cy + 11); c.textAlign = 'left';
+        let nome = x.nome.replace(/\s*\(.*\)$/, ''); c.font = `700 28px ${fb}`; while (c.measureText(nome).width > sw - 110 && nome.length > 4) nome = nome.slice(0, -2).trimEnd() + '…';
+        c.fillStyle = '#f2e8d5'; c.fillText(nome, cx + 56, cy - 4);
+        c.fillStyle = '#9fc3c0'; c.font = `500 26px ${fb}`; c.fillText(NOME_NIVEL[x.atual], cx + 56, cy + 30);
+      });
+    }
+  } catch {}
   c.fillStyle = '#9fc3c0'; c.font = `500 28px ${fb}`; c.fillText('Feito com o Por Onde Andei', 60, H - 50);
   return new Promise(r => cv.toBlob(r, 'image/png'));
 }
@@ -3121,7 +3179,7 @@ function montaApp() {
   setTimeout(verTudo, 350); // espera a lista se acomodar para descontar a altura dela
 
   $('#contadores').addEventListener('click', e => { const b = e.target.closest('.contador'); if (!b) return; if (b.dataset.extras) return abreExtras(); S.aba = b.dataset.aba; S.filtro = ''; $('#filtro').value = ''; atualizaTudo(); });
-  let tLista; mapa.on('moveend', () => { clearTimeout(tLista); tLista = setTimeout(() => { renderLista(); desenhaBase(); }, 120); });
+  let tLista; mapa.on('moveend', () => { clearTimeout(tLista); tLista = setTimeout(() => { renderLista(); desenhaBase(); desenhaMunicipios(); }, 120); });
   $('#lista').addEventListener('click', e => {
     if (e.target.closest('[data-ver-todos]')) {
       verTudo();
