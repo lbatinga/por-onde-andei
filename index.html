@@ -921,6 +921,7 @@ const carregaRanking = () => rankingAero ? Promise.resolve(rankingAero) : fetch(
   const posNac = new Map();
   rk.brasil.lista.forEach(x => x.iata && posNac.set(x.iata, { pais: 'BR', pos: x.pos, pax: x.pax }));
   (rk.argentina?.lista || []).forEach(x => x.iata && posNac.set(x.iata, { pais: 'AR', pos: x.pos, pax: x.pax }));
+  (rk.reino_unido?.lista || []).forEach(x => posNac.set(x.iata, { pais: 'GB', pos: x.pos, pax: x.pax }));
   Object.entries(rk.europa_paises?.paises || {}).forEach(([pais, l]) => l.forEach(x => !posNac.has(x.iata) && posNac.set(x.iata, { pais, pos: x.pos, pax: x.pax })));
   const posCont = new Map(), ORIENTE = new Set(['AE', 'QA', 'SA', 'KW', 'BH', 'OM', 'IL', 'JO', 'LB', 'IQ', 'IR', 'EG']);
   Object.entries(rk.continentes || {}).forEach(([reg, c]) => c.lista.forEach(x => {
@@ -954,7 +955,45 @@ function paxTexto(x) {
   const iata = ref.slice(5), d = rankingAero.posNac.get(iata) || rankingAero.posCont.get(iata);
   return d ? `${(d.pax / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} milhões de passageiros por ano` : '';
 }
-const attrPorte = x => { const p = porteAero(x); return p ? ` data-porte="${p}" title="${PORTES[p]}"` : ''; };
+// População das cidades: IBGE no Brasil (com ranking entre os 5.570 municípios) e GeoNames fora
+// (só porte e número aproximado — lá os países medem cidade de jeitos diferentes, então sem ranking).
+let popCidades = null;
+const carregaPop = () => popCidades ? Promise.resolve(popCidades) : fetch('cidades-pop.json').then(r => r.json()).then(d => {
+  const ordem = Object.entries(d.brasil.pop).sort((a, b) => b[1] - a[1]);
+  const grade = new Map();
+  d.mundo.lista.forEach(c => { const k = Math.floor(c[0]) + ',' + Math.floor(c[1]); if (!grade.has(k)) grade.set(k, []); grade.get(k).push(c); });
+  popCidades = { ...d, posBR: new Map(ordem.map(([cod], i) => [cod, i + 1])), totalBR: ordem.length, grade };
+  return popCidades;
+});
+function popCidade(x) {
+  if (!popCidades || x.tipo !== 'cidade') return null;
+  const ref = x.ref_externa || x.ref || '';
+  if (ref.startsWith('ibge:')) { const cod = ref.slice(5), pop = popCidades.brasil.pop[cod]; return pop ? { pop, pos: popCidades.posBR.get(cod), pais: 'BR', ibge: true } : null; }
+  if (x.pais === 'BR' || x.lat == null) return null;
+  const cands = [];
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) (popCidades.grade.get((Math.floor(x.lat) + i) + ',' + (Math.floor(x.lon) + j)) || []).forEach(c => cands.push([c, distKm(x.lat, x.lon, c[0], c[1])]));
+  const n = norm(x.nome || '');
+  // mesmo nome até 30 km; senão, a cidade mais próxima até 8 km
+  const achou = cands.filter(([c, d]) => d < 30 && norm(c[4]) === n).sort((a, b) => a[1] - b[1])[0] || cands.filter(([, d]) => d < 8).sort((a, b) => a[1] - b[1])[0];
+  return achou ? { pop: achou[0][2], pais: achou[0][3], ibge: false } : null;
+}
+const PORTES_CIDADE = { muito: 'Metrópole', grande: 'Cidade grande', medio: 'Cidade média', pequeno: 'Cidade pequena' };
+const porteCidade = x => { const p = popCidade(x); return !p ? null : p.pop >= 1e6 ? 'muito' : p.pop >= 5e5 ? 'grande' : p.pop >= 1e5 ? 'medio' : 'pequeno'; };
+const fmtHab = n => n >= 1e6 ? `${(n / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${n >= 2e6 ? 'milhões' : 'milhão'}` : n >= 1e4 ? `${Math.round(n / 1000)} mil` : n.toLocaleString('pt-BR');
+const habitantes = n => `${fmtHab(n)}${n >= 1e6 ? ' de' : ''} habitantes`;
+const attrPorte = x => {
+  if (x.tipo === 'cidade') { const p = porteCidade(x); return p ? ` data-porte="${p}" title="${PORTES_CIDADE[p]}"` : ''; }
+  const p = porteAero(x); return p ? ` data-porte="${p}" title="${PORTES[p]}"` : '';
+};
+// quadro do topo do cadastro (aeroporto ou cidade): posição, porte e números
+function quadroRanking(l) {
+  if (l.tipo === 'aeroporto' && rankingTexto(l)) return `<div class="rank-form"${attrPorte(l)}><b>${esc(rankingTexto(l))}</b><small>${esc([PORTES[porteAero(l)], paxTexto(l)].filter(Boolean).join(' · '))}</small></div>`;
+  const p = l.tipo === 'cidade' && popCidade(l);
+  if (!p) return '';
+  const titulo = p.ibge ? `🇧🇷 ${p.pos.toLocaleString('pt-BR')}ª mais populosa do Brasil (de ${popCidades.totalBR.toLocaleString('pt-BR')})` : PORTES_CIDADE[porteCidade(l)];
+  const sub = p.ibge ? `${PORTES_CIDADE[porteCidade(l)]} · ${habitantes(p.pop)} (IBGE ${popCidades.brasil.ano})` : `cerca de ${habitantes(p.pop)} (GeoNames, aproximado)`;
+  return `<div class="rank-form"${attrPorte(l)}><b>${esc(titulo)}</b><small>${esc(sub)}</small></div>`;
+}
 const lugarDaRef = ref => S.lugares.find(l => l.ref_externa === ref);
 function linhaBase(b) {
   const marcas = rotulosPara(b.tipo).map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="false" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-base="${esc(b.ref)}" data-r="${r.id}">${CHECK}</button>`).join('');
@@ -1199,7 +1238,7 @@ function linhaLugar(l) {
     : S.rotulos.filter(r => rotuloServe(r, l.tipo) || m.has(r.id)).map(r => `<button class="marca" style="--c:${esc(r.cor)}" aria-pressed="${m.has(r.id)}" aria-label="${esc(r.nome)}" title="${esc(r.nome)}" data-l="${l.id}" data-r="${r.id}">${CHECK}</button>`).join('');
   const estiloTipo = l.tipo === 'unesco' ? ` style="color:#fff;border:0;background:${fundoCat(catDe(l.ref_externa))}"` : '';
   return `<div class="item"><span class="tipo"${estiloTipo}${attrPorte(l)}>${iconeDe(l)}</span>
-    <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : ehParque(l) ? 'Parque nacional' : '', local || TIPOS[l.tipo].um].filter(Boolean).join(' · '))}</small></button>
+    <button class="txt" data-abrir="${l.id}"><b>${esc(l.nome)}</b><small>${esc([l.tipo === 'unesco' && S.baseUnesco ? CATEGORIAS[catDe(l.ref_externa)].nome : ehParque(l) ? 'Parque nacional' : '', local || TIPOS[l.tipo].um, l.tipo === 'cidade' && popCidade(l) ? fmtHab(popCidade(l).pop) + ' hab.' : ''].filter(Boolean).join(' · '))}</small></button>
     <div class="marcas">${marcas}</div></div>`;
 }
 // A lista mostra só o que está visível no mapa (como no Places Been)
@@ -1345,7 +1384,7 @@ function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
   const chips = S.rotulos.map(r => `<button type="button" class="chip" style="--c:${esc(r.cor)}" data-r="${r.id}" aria-pressed="${rotSel.has(r.id)}" ${rotuloServe(r, l.tipo || 'cidade') || rotSel.has(r.id) ? '' : 'hidden'}>${esc(r.nome)}</button>`).join('');
   abreModal(`
     <h3>${esc(titulo)}</h3>
-    ${l.tipo === 'aeroporto' && rankingTexto(l) ? `<div class="rank-form"${attrPorte(l)}><b>${esc(rankingTexto(l))}</b><small>${esc([PORTES[porteAero(l)], paxTexto(l)].filter(Boolean).join(' · '))}</small></div>` : ''}
+    ${quadroRanking(l)}
     ${sugestoes ? `<div class="campo"><span class="rotulo-campo">Sugestões de nome</span><div class="chips">${sugestoes.map(s => `<button type="button" class="chip sug" style="--c:var(--map-border)" data-s="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>` : ''}
     <div class="linha">
       <div class="campo" style="flex-basis:220px"><label for="f-nome">Nome</label><input id="f-nome" value="${esc(l.nome || '')}" placeholder="Ex.: Praia do Gunga"></div>
@@ -1991,15 +2030,16 @@ async function desenhaMapaBandeiras(canvas, modo = 'paises', arquivos = {}) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const W = canvas.clientWidth * dpr, H = Math.round(W * 0.75); canvas.width = W; canvas.height = H; canvas.style.height = (H / dpr) + 'px';
   const c = canvas.getContext('2d');
-  // modo 'paises': países visitados com a bandeira; modo 'estados': estados do país da sua casa
-  const paisBase = casa()?.pais || 'BR';
-  const feicoes = modo === 'estados' ? S.estados.filter(e => e.pais === paisBase) : S.paises;
-  const vis = feicoes.filter(f => (modo === 'estados' ? estadosVis : paisesVis).has(f.id));
-  const enquadrar = modo === 'estados' ? feicoes : vis;
+  // modo 'paises': países visitados com a bandeira; 'estados:XX': estados do país XX (sem XX, o da sua casa)
+  const [tipoModo, paisModo] = modo.split(':'), ehEstados = tipoModo === 'estados';
+  const paisBase = paisModo || casa()?.pais || 'BR';
+  const feicoes = ehEstados ? S.estados.filter(e => e.pais === paisBase) : S.paises;
+  const vis = feicoes.filter(f => (ehEstados ? estadosVis : paisesVis).has(f.id));
+  const enquadrar = ehEstados ? feicoes : vis;
   // enquadra (com folga); sem nenhum, mostra o mundo
   let [x0, y0, x1, y1] = enquadrar.length ? enquadrar.reduce((b, p) => [Math.min(b[0], p.maior[0]), Math.min(b[1], p.maior[1]), Math.max(b[2], p.maior[2]), Math.max(b[3], p.maior[3])], [180, 90, -180, -90]) : [-170, -58, 190, 84];
-  const folga = modo === 'estados' ? [0.06, 0.05] : [0.25, 0.15];
-  const padX = Math.max(modo === 'estados' ? 1 : 8, (x1 - x0) * folga[0]), padY = Math.max(modo === 'estados' ? 1 : 6, (y1 - y0) * folga[1]);
+  const folga = ehEstados ? [0.06, 0.05] : [0.25, 0.15];
+  const padX = Math.max(ehEstados ? 1 : 8, (x1 - x0) * folga[0]), padY = Math.max(ehEstados ? 1 : 6, (y1 - y0) * folga[1]);
   x0 -= padX; x1 += padX; y0 -= padY; y1 += padY;
   const latMeio = (y0 + y1) / 2, kx = Math.cos(latMeio * Math.PI / 180);
   let lw = (x1 - x0) * kx, lh = y1 - y0;
@@ -2009,12 +2049,12 @@ async function desenhaMapaBandeiras(canvas, modo = 'paises', arquivos = {}) {
   c.fillStyle = '#cfe3ea'; c.fillRect(0, 0, W, H);
   c.lineWidth = dpr * 0.6; c.strokeStyle = '#ffffff';
   for (const p of S.paises) { if (p.bbox[2] < x0 - 10 || p.bbox[0] > x1 + 10) continue; caminho(p); c.fillStyle = '#e9e4da'; c.fill('evenodd'); c.stroke(); }
-  if (modo === 'estados') for (const e of feicoes) { caminho(e); c.fillStyle = '#ddd6c8'; c.fill('evenodd'); c.strokeStyle = '#ffffff'; c.stroke(); }
-  const src = f => modo === 'estados'
+  if (ehEstados) for (const e of feicoes) { caminho(e); c.fillStyle = '#ddd6c8'; c.fill('evenodd'); c.strokeStyle = '#ffffff'; c.stroke(); }
+  const src = f => ehEstados
     ? (arquivos[isoEstado(f.id)] ? urlBandeira(arquivos[isoEstado(f.id)]).replace('width=160', 'width=480') : null)
     : (/^[A-Z]{2}$/.test(f.id) ? `https://flagcdn.com/w640/${f.id.toLowerCase()}.png` : null);
   // estados vêm do Wikimedia: sem crossOrigin (o quadro só é exibido, não exportado)
-  const imgs = await Promise.all(vis.map(f => src(f) ? carregaImg(src(f), modo !== 'estados') : null));
+  const imgs = await Promise.all(vis.map(f => src(f) ? carregaImg(src(f), !ehEstados) : null));
   vis.forEach((p, i) => {
     c.save(); caminho(p); c.clip('evenodd');
     const img = imgs[i], [a, b, d, e] = p.maior;
@@ -2342,6 +2382,7 @@ function abreEstatisticas() {
         ${longe ? `<span>Mais longe de casa</span><b>${esc(longe[0].nome)} · ${fmtKm(Math.round(longe[1]))}</b>` : ''}
         ${norte ? `<span>Cidade mais ao norte</span><b>${esc(norte.nome)}</b><span>Mais ao sul</span><b>${esc(sul.nome)}</b>
         <span>Mais a leste</span><b>${esc(leste.nome)}</b><span>Mais a oeste</span><b>${esc(oeste.nome)}</b>` : ''}</div>
+      <h4>Tamanho das cidades</h4><div id="st-cid"><p class="meta">Carregando…</p></div>
       <h4>O que você já marcou</h4>
       <div class="tabela">${Object.keys(NOMES_T).filter(t => porTipo[t]).map(t => `<span>${NOMES_T[t]}</span><b>${num(porTipo[t])}</b>`).join('')}
         ${porRot.map(([r, n]) => `<span><i class="bolinha" style="background:${esc(r.cor)}"></i>${esc(r.nome)}</span><b>${num(n)}</b>`).join('')}</div>
@@ -2405,8 +2446,21 @@ function abreEstatisticas() {
           return `<div class="portes">${Object.keys(c).filter(k => c[k]).map(k => `<span data-porte="${k}"><i></i>${c[k]} ${k === 'muito' ? (c[k] === 1 ? 'muito grande' : 'muito grandes') : k === 'medio' ? (c[k] === 1 ? 'médio' : 'médios') : k + (c[k] === 1 ? '' : 's')}</span>`).join('')}</div>`; })()}
         <div class="aero-lista">${meus.map(x => `<div class="aero-linha"><span class="sigla"${attrPorte(x.l)}>${esc(x.iata)}</span><span class="aero-nome">${esc(curto(x.l.nome))}</span>
           <span class="aero-pos">${x.mundo ? `<span title="Posição no mundo">🌎 ${x.mundo}º</span>` : ''}${x.cont ? `<span title="Posição no continente">${REG[x.cont.reg] || ''} ${x.cont.pos}º</span>` : ''}${x.nac ? `<span title="Posição no país">${bandeira(x.nac.pais)} ${x.nac.pos}º</span>` : ''}${!x.mundo && !x.cont && !x.nac ? '<span class="fora">sem ranking</span>' : ''}</span></div>`).join('')}</div>
-        <p class="meta">🌎 mundo: top 50 do ACI ${rk.mundo.ano}${rk.continentes ? ` · continentes: listas regionais da Wikipedia (ACI e órgãos oficiais) ${Object.values(rk.continentes)[0].ano}` : ''} · país: ANAC ${rk.brasil.ano}${rk.argentina ? `, ANAC Argentina ${rk.argentina.ano}` : ''}${rk.europa_paises ? `, Eurostat ${rk.europa_paises.ano} (Europa)` : ''}</p>`;
+        <p class="meta">🌎 mundo: top 50 do ACI ${rk.mundo.ano}${rk.continentes ? ` · continentes: listas regionais da Wikipedia (ACI e órgãos oficiais) ${Object.values(rk.continentes)[0].ano}` : ''} · país: ANAC ${rk.brasil.ano}${rk.argentina ? `, ANAC Argentina ${rk.argentina.ano}` : ''}${rk.europa_paises ? `, Eurostat ${rk.europa_paises.ano} (Europa)` : ''}${rk.reino_unido ? `, CAA ${rk.reino_unido.ano} (Reino Unido)` : ''}</p>`;
     }).catch(() => { const box = m.querySelector('#st-aero'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar o ranking.</p>'; });
+    carregaPop().then(() => {
+      const box = m.querySelector('#st-cid'); if (!box) return;
+      const cids = visitados.filter(l => l.tipo === 'cidade').map(l => ({ l, p: popCidade(l) })).filter(x => x.p).sort((a, b) => b.p.pop - a.p.pop);
+      if (!cids.length) { box.innerHTML = '<p class="meta">Sem dados de população ainda.</p>'; return; }
+      const c = { muito: 0, grande: 0, medio: 0, pequeno: 0 }; cids.forEach(x => c[porteCidade(x.l)]++);
+      const nomes = { muito: ['metrópole', 'metrópoles'], grande: ['grande', 'grandes'], medio: ['média', 'médias'], pequeno: ['pequena', 'pequenas'] };
+      const maior = cids[0], menor = cids[cids.length - 1], brs = cids.filter(x => x.p.ibge);
+      box.innerHTML = `<div class="portes">${Object.keys(c).filter(k => c[k]).map(k => `<span data-porte="${k}"><i></i>${c[k]} ${nomes[k][c[k] === 1 ? 0 : 1]}</span>`).join('')}</div>
+        <div class="tabela"><span>Maior cidade</span><b>${esc(maior.l.nome)} · ${fmtHab(maior.p.pop)}</b>
+        <span>Menor cidade</span><b>${esc(menor.l.nome)} · ${fmtHab(menor.p.pop)}</b>
+        ${brs.length ? `<span>Moradores das cidades do Brasil que você visitou</span><b>${fmtHab(brs.reduce((t, x) => t + x.p.pop, 0))}</b>` : ''}</div>
+        <p class="meta">Metrópole: 1 milhão de habitantes ou mais · grande: 500 mil a 1 milhão · média: 100 a 500 mil · pequena: menos de 100 mil. Brasil: IBGE ${popCidades.brasil.ano}; fora: GeoNames, aproximado.</p>`;
+    }).catch(() => { const box = m.querySelector('#st-cid'); if (box) box.innerHTML = '<p class="meta">Sem conexão para carregar a população.</p>'; });
     carregaBase('museu').then(base => {
       const box = m.querySelector('#st-museus'); if (!box) return;
       const feitos = new Set(S.lugares.filter(l => l.tipo === 'museu' && visitado(l.id, vis)).map(l => l.ref_externa));
@@ -2517,7 +2571,7 @@ async function abreBandeiras(abaInicial = 'paises') {
       abaAtual = aba;
       m.querySelectorAll('[data-aba-band]').forEach(b => b.setAttribute('aria-selected', b.dataset.abaBand === aba));
       opcoes.innerHTML = aba === 'mapa'
-        ? `<div class="seg"><button data-modo="paises" aria-pressed="${mapaModo === 'paises'}">Países</button><button data-modo="estados" aria-pressed="${mapaModo === 'estados'}">Estados ${bandeira(paisCasa)}</button></div>`
+        ? `<div class="seg"><button data-modo="paises" aria-pressed="${mapaModo === 'paises'}">Países</button>${[...paisesComEstado].sort((a, b) => (b === paisCasa) - (a === paisCasa) || nomePais(a).localeCompare(nomePais(b), 'pt-BR')).map(p => `<button data-modo="estados:${p}" aria-pressed="${mapaModo === 'estados:' + p}" title="Estados de ${esc(nomePais(p))}">${bandeira(p)}</button>`).join('')}</div>`
         : `<label class="album"><input type="checkbox" ${albumCompleto ? 'checked' : ''}> Mostrar as que faltam</label>`;
       const corpo = m.querySelector('#band-corpo');
       corpo.innerHTML = aba === 'paises' ? htmlPaises() : aba === 'estados' ? htmlEstados() : aba === 'capitais' ? htmlCapitais() : '<canvas class="mapa-band"></canvas>';
@@ -2790,6 +2844,7 @@ function ligaGaveta() {
 }
 function montaApp() {
   carregaRanking().then(() => atualizaTudo()).catch(() => {});
+  carregaPop().then(() => atualizaTudo()).catch(() => {});
   $('#carregando').hidden = true; $('#app').hidden = false;
   document.body.classList.toggle('publico', !!S.publico);
   iniciaMapa(); atualizaTudo();

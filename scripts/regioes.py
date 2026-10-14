@@ -201,3 +201,48 @@ def wikidata_resolver(session, ua):
         return cache[titulo]
 
     return resolve
+
+
+# Reino Unido: CAA, tabela 09 (passageiros terminais + trânsito), anual. O link do CSV muda todo ano,
+# então a página anual é lida para achar a "Table 09 ... (CSV".
+CAA_PAGINA = "https://www.caa.co.uk/data-and-analysis/uk-aviation-market/airports/uk-airport-data/uk-airport-data-{ano}/annual-{ano}/"
+CAA_IATA = {
+    "GATWICK": "LGW", "HEATHROW": "LHR", "LONDON CITY": "LCY", "LUTON": "LTN", "SOUTHEND": "SEN", "STANSTED": "STN",
+    "ABERDEEN": "ABZ", "BARRA": "BRR", "BELFAST CITY (GEORGE BEST)": "BHD", "BELFAST INTERNATIONAL": "BFS",
+    "BENBECULA": "BEB", "BIGGIN HILL": "BQH", "BIRMINGHAM": "BHX", "BLACKPOOL": "BLK", "BOURNEMOUTH": "BOH",
+    "BRISTOL": "BRS", "CAMPBELTOWN": "CAL", "CARDIFF WALES": "CWL", "CITY OF DERRY (EGLINTON)": "LDY", "DUNDEE": "DND",
+    "EAST MIDLANDS INTERNATIONAL": "EMA", "EDINBURGH": "EDI", "EXETER": "EXT", "FARNBOROUGH": "FAB", "GLASGOW": "GLA",
+    "HUMBERSIDE": "HUY", "INVERNESS": "INV", "ISLAY": "ILY", "ISLES OF SCILLY (ST.MARYS)": "ISC", "KIRKWALL": "KOI",
+    "LANDS END (ST JUST)": "LEQ", "LEEDS BRADFORD": "LBA", "LERWICK (TINGWALL)": "LWK", "LIVERPOOL (JOHN LENNON)": "LPL",
+    "LYDD": "LYX", "MANCHESTER": "MAN", "NEWCASTLE": "NCL", "NEWQUAY": "NQY", "NORWICH": "NWI", "OXFORD (KIDLINGTON)": "OXF",
+    "PRESTWICK": "PIK", "SOUTHAMPTON": "SOU", "STORNOWAY": "SYY", "SUMBURGH": "LSI", "TEESSIDE INTERNATIONAL AIRPORT": "MME",
+    "TIREE": "TRE", "WICK JOHN O GROATS": "WIC", "ALDERNEY": "ACI", "GUERNSEY": "GCI", "ISLE OF MAN": "IOM", "JERSEY": "JER",
+}
+
+
+def link_caa(html):
+    """Acha o link do CSV da tabela 09 na página anual da CAA."""
+    for m in re.finditer(r'href="([^"]+)"[^>]*>\s*<span>\s*Table 09[^<]*\(CSV', html):
+        href = m.group(1)
+        return href if href.startswith("http") else "https://www.caa.co.uk" + href
+    return None
+
+
+def parse_caa(texto):
+    """CSV da tabela 09 -> (ano, [(iata, pax)]) e lista de nomes sem código."""
+    import csv, io
+    linhas = list(csv.DictReader(io.StringIO(texto.lstrip("\ufeff"))))
+    ano, lista, sem = None, [], []
+    for row in linhas:
+        nome = (row.get("rpt_apt_name") or "").strip().upper()
+        pax = int(float(row.get("total_pax_tp") or 0))
+        ano = int(row.get("this_period") or 0) or ano
+        if pax <= 0:
+            continue
+        iata = CAA_IATA.get(nome)
+        if not iata:
+            sem.append(nome)
+            continue
+        lista.append((iata, pax))
+    lista.sort(key=lambda x: -x[1])
+    return ano, lista, sem

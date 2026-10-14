@@ -202,6 +202,27 @@ def main():
         if anterior.get("continentes"):
             saida["continentes"] = anterior["continentes"]
     try:
+        uk = None
+        for ano_uk in (ano_max, ano_max - 1):
+            r = requests.get(regioes.CAA_PAGINA.format(ano=ano_uk), headers=UA, timeout=60)
+            link = r.ok and regioes.link_caa(r.text)
+            if link:
+                a_uk, lista_uk, sem = regioes.parse_caa(requests.get(link, headers=UA, timeout=60).text)
+                if sem:
+                    print("CAA sem código IATA:", sem, file=sys.stderr)
+                if len(lista_uk) >= 20:
+                    uk = {"ano": a_uk, "fonte": "CAA (Table 09, passageiros terminais e em trânsito)",
+                          "lista": [{"pos": i + 1, "iata": iata, "pax": pax} for i, (iata, pax) in enumerate(lista_uk)]}
+                    break
+        if not uk:
+            raise RuntimeError("tabela da CAA não encontrada")
+        print("CAA ano", uk["ano"], "aeroportos", len(uk["lista"]), file=sys.stderr)
+        saida["reino_unido"] = uk
+    except Exception as e:
+        print("CAA falhou:", e, file=sys.stderr)
+        if anterior.get("reino_unido"):
+            saida["reino_unido"] = anterior["reino_unido"]
+    try:
         txt = requests.get(regioes.EUROSTAT, headers=UA, timeout=180).text
         ano_eu, lista_eu = regioes.parse_eurostat(txt, por_icao)
         if not ano_eu:

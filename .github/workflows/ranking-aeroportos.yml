@@ -1,11 +1,11 @@
-name: Bases anuais (ranking de aeroportos e museus)
+name: Bases anuais (aeroportos, museus e cidades)
 on:
   workflow_dispatch:
   schedule:
     - cron: '0 9 5 8 *'   # 5 de agosto, todo ano (depois da atualização das bases)
   push:
     branches: [main]
-    paths: ['scripts/ranking_aeroportos.py', 'scripts/regioes.py', 'scripts/museus.py', '.github/workflows/ranking-aeroportos.yml']
+    paths: ['scripts/ranking_aeroportos.py', 'scripts/regioes.py', 'scripts/museus.py', 'scripts/cidades.py', '.github/workflows/ranking-aeroportos.yml']
 permissions:
   contents: write
 jobs:
@@ -19,9 +19,10 @@ jobs:
       - run: pip install requests beautifulsoup4
       - run: python scripts/ranking_aeroportos.py > scripts/ranking-log.txt 2>&1 || (cat scripts/ranking-log.txt; echo FALHOU >> scripts/ranking-log.txt)
       - run: python scripts/museus.py >> scripts/ranking-log.txt 2>&1 || (cat scripts/ranking-log.txt; echo FALHOU MUSEUS >> scripts/ranking-log.txt)
+      - run: python scripts/cidades.py >> scripts/ranking-log.txt 2>&1 || (cat scripts/ranking-log.txt; echo FALHOU CIDADES >> scripts/ranking-log.txt)
       - name: Salva se mudou
         run: |
           git config user.name "Claude"
           git config user.email "noreply@anthropic.com"
-          git add ranking-aeroportos.json museus.json scripts/ranking-log.txt
+          git add ranking-aeroportos.json museus.json cidades-pop.json scripts/ranking-log.txt
           git diff --cached --quiet || (git commit -m "Atualiza bases anuais (ranking de aeroportos e museus)" && git push)
