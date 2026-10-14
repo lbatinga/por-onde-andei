@@ -3115,7 +3115,7 @@ function abreVoos() {
       const bc = m.querySelector('#vo-completar'); if (bc) bc.onclick = () => completaVoos(bc, () => desenhar(m));
       m.querySelectorAll('[data-voo]').forEach(b => b.onclick = () => editaVoo(S.voos.find(x => x.id === b.dataset.voo), () => desenhar(m)));
     };
-    abreModal(`<h3>Voos</h3><div id="vo-corpo"></div>
+    abreModal(`<h3>Voos</h3><div id="vo-corpo"></div><p class="meta">Busca de voos: dados da <a href="https://aerodatabox.com" target="_blank" rel="noopener">AeroDataBox</a>.</p>
       <div class="acoes"><button class="btn" id="vo-fechar">Fechar</button><button class="btn principal" id="vo-novo">Novo voo</button></div>`, (m, fechar) => {
       m.querySelector('#vo-fechar').onclick = fechar;
       m.querySelector('#vo-novo').onclick = () => editaVoo(null, () => desenhar(m));
@@ -3175,6 +3175,7 @@ function editaVoo(v, aoSalvar) {
         ${vgs.length ? `<div class="campo"><label for="vf-vg">Viagem</label><select id="vf-vg"><option value="">Nenhuma</option>${vgs.map(x => `<option value="${x.id}" ${v.viagem_id === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></div>` : ''}
         <div class="campo"><label for="vf-notas">Notas</label><input id="vf-notas" value="${esc(v.notas || '')}"></div>
       </div>
+      <p class="meta">A busca usa dados da <a href="https://aerodatabox.com" target="_blank" rel="noopener">AeroDataBox</a> e alcança até 1 ano para trás.</p>
       <div class="acoes">${novo ? '' : '<button class="btn perigo" id="vf-apagar">Excluir</button>'}<button class="btn" id="vf-cancelar">Cancelar</button><button class="btn principal" id="vf-salvar">Salvar</button></div>`, (m, fechar) => {
       const $m = s => m.querySelector(s);
       let minutos = v.minutos || null, ciaNome = v.cia_nome || null;
