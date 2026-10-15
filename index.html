@@ -371,6 +371,7 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .voo-rota { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; min-width: 96px; }
 .voo-rota b { font-size: 1.05rem; font-weight: 800; letter-spacing: .02em; }
 .voo-rota i { font-style: normal; color: var(--muted); font-size: .8rem; }
+.voo-edita { flex: none; font-size: .75rem; font-weight: 600; color: var(--muted); align-self: center; padding-left: 6px; }
 .voo-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .voo-info b { font-size: .88rem; }
 .voo-info small { color: var(--muted); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3276,7 +3277,7 @@ const kmVoo = v => { const a = aeroPorIata(v.origem), b = aeroPorIata(v.destino)
 // tempo de voo: o registrado; sem ele, estimativa pela distância (800 km/h + 30 min de solo e subida)
 const minVoo = v => v.minutos || Math.round(kmVoo(v) / 800 * 60 + 30);
 const fmtHoras = min => min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}` : `${min} min`;
-const nomeCia = (v, cias) => v.cia_nome || (cias && cias[v.cia]) || v.cia || 'Sem companhia';
+const nomeCia = (v, cias) => { const e = v.cia_nome && empresaDoVoo(v); if (e?.f && primeiraPalavra(e.n) !== primeiraPalavra(v.cia_nome)) return e.n; return v.cia_nome || (cias && cias[v.cia]) || v.cia || 'Sem companhia'; };
 const fabricante = modelo => { const m = (modelo || '').trim(); if (!m) return null; const p = m.split(/[\s/]+/)[0]; return /^(Aerospatiale|ATR)/i.test(m) ? 'ATR' : p.replace(/^de$/i, 'De Havilland'); };
 const cidadeAero = iata => { const a = aeroPorIata(iata); return a ? (a.sub.split(' · ')[1] || '').split(',')[0] : ''; };
 const ordemVoos = () => [...(S.voos || [])].sort((a, b) => b.data.localeCompare(a.data) || (b.partida || '').localeCompare(a.partida || ''));
@@ -3290,7 +3291,7 @@ function abreVoos() {
         ${lista.map(v => `<button class="voo-card" data-voo="${v.id}">
           <span class="voo-rota"><b>${esc(v.origem)}</b><i>✈</i><b>${esc(v.destino)}</b></span>
           <span class="voo-info"><b>${esc([v.numero, nomeCia(v, cias)].filter(Boolean).join(' · '))}</b>
-          <small>${esc([new Date(v.data + 'T12:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }), cidadeAero(v.origem) && cidadeAero(v.destino) ? `${cidadeAero(v.origem)} → ${cidadeAero(v.destino)}` : '', v.modelo, v.matricula].filter(Boolean).join(' · '))}</small></span></button>`).join('')}`).join('')
+          <small>${esc([new Date(v.data + 'T12:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }), cidadeAero(v.origem) && cidadeAero(v.destino) ? `${cidadeAero(v.origem)} → ${cidadeAero(v.destino)}` : '', v.modelo, v.matricula].filter(Boolean).join(' · '))}</small></span><span class="voo-edita">Editar ›</span></button>`).join('')}`).join('')
         : '<p class="meta">Nenhum voo ainda. Toque em “Novo voo”: com o número e a data, o app busca o resto.</p>';
       const inc = incompletos();
       if (inc.length) m.querySelector('#vo-corpo').insertAdjacentHTML('afterbegin', `<div class="sugestao"><span><b>${inc.length} ${inc.length === 1 ? 'voo com dados faltando' : 'voos com dados faltando'}</b><small>Último ano: avião e matrícula. Mais antigos no Brasil: horários e avião pela ANAC.</small></span><button class="btn" id="vo-completar">Completar</button></div>`);
@@ -3308,7 +3309,8 @@ function abreVoos() {
       aba((() => { try { return (S.voos || []).length ? localStorage.getItem('poa-vo-aba') || 'pass' : 'lista'; } catch { return 'pass'; } })());
       m.querySelector('#vo-fechar').onclick = fechar;
       const depois = () => { desenhar(m); passaporte(); };
-      m.querySelector('#vo-novo').onclick = () => editaVoo(null, depois);
+      // voo novo: mostra na Lista, onde dá para tocar nele e editar ou excluir
+      m.querySelector('#vo-novo').onclick = () => editaVoo(null, () => { depois(); aba('lista'); toast('Voo salvo. Para editar ou excluir, toque nele na Lista', 4000); });
       desenhar(m); passaporte();
       m._depois = depois;
     });
@@ -3619,7 +3621,7 @@ async function htmlPassaporte() {
     <h4 class="pp-h">Companhias</h4>${companhias}
     <h4 class="pp-h">Aviões <small>toque para ver as fotos</small></h4>${aviaoHtml}
     <h4 class="pp-h">Por viagem</h4>${viagens}
-    <p class="meta pp-nota">Distâncias em linha reta pela curva da Terra.${estimado ? ' Sem horário registrado, o tempo é estimado pela distância.' : ''} Fotos: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a> (pela matrícula) ou Wikipédia (pelo modelo), com o crédito de cada foto. Logos das companhias: Travelpayouts e Wikimedia Commons (logos de época, via Wikidata). Busca de voos: AeroDataBox e ANAC (VRA).</p>`;
+    <p class="meta pp-nota">Para editar ou excluir um voo, abra a aba Lista e toque nele. Distâncias em linha reta pela curva da Terra.${estimado ? ' Sem horário registrado, o tempo é estimado pela distância.' : ''} Fotos: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a> (pela matrícula) ou Wikipédia (pelo modelo), com o crédito de cada foto. Logos das companhias: Travelpayouts e Wikimedia Commons (logos de época, via Wikidata). Busca de voos: AeroDataBox e ANAC (VRA).</p>`;
 }
 // ---- Carteira do Google: cartão "Passaporte de voos" (função carteira no servidor)
 function resumoCarteira() {
