@@ -1,4 +1,4 @@
-ANAC Atualizado em: 2026-10-14 ano 2025 aeroportos 162
+ANAC Atualizado em: 2026-10-15 ano 2025 aeroportos 162
 Wikipedia/ACI ano 2025 aeroportos 50
 ANAC Argentina 2026 incompleto: 8 meses
 ANAC Argentina ano 2025 aeroportos 49
@@ -95,3 +95,4 @@ FALHOU CIDADES
 Aeroportos 3244 novos [] saíram []
 municipios falhou: HTTPSConnectionPool(host='servicodados.ibge.gov.br', port=443): Max retries exceeded with url: /api/v1/localidades/municipios (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010)')))
 Companhias 993 aviões 246
+Histórico de companhias 1111 códigos 2944 empresas
