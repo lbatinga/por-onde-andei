@@ -332,6 +332,11 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .pp-cia .logo img { height: 26px; width: auto; max-width: 76px; display: block; }
 .pp-cia div { flex: 1; min-width: 0; } .pp-cia b { color: var(--c); font-size: 1rem; font-weight: 800; }
 .pp-cia small { display: block; font-size: .74rem; color: var(--muted); }
+.selo-cia { background: var(--c) !important; color: #fff; font: 800 .82rem/1 var(--f-display); letter-spacing: .04em; min-width: 52px; height: 34px; padding: 0 8px !important; white-space: nowrap; }
+.selo-cia.peq { min-width: 0; height: 18px; font-size: .62rem; padding: 0 5px !important; border-radius: 4px; display: inline-grid; place-items: center; box-shadow: none; }
+.pp-eras { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; font-size: .72rem; color: var(--muted); }
+.pp-eras span { display: inline-flex; align-items: center; gap: 5px; }
+.pp-eras img { height: 14px; width: auto; max-width: 44px; background: #fff; border-radius: 3px; padding: 1px 2px; }
 .pp-cia .n { font-size: 1.4rem; font-weight: 800; color: var(--c); }
 .pp-aviao { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
 .pp-aviao .pp-topo { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; min-height: 28px; }
@@ -2700,7 +2705,7 @@ async function calculaSelos() {
     const vs = S.voos;
     lista.push(selo('voos', 'Voos', ICONES.aeroporto, 'Voos', vs.length, null, [5, 10, 25, 50, 100]));
     lista.push(selo('km-voados', 'Voos', GLOBO, 'Km voados', vs.reduce((t, v) => t + kmVoo(v), 0), null, [10000, 25000, 50000, 100000, 250000]));
-    lista.push(selo('companhias', 'Voos', ICONES.aeroporto, 'Companhias', new Set(vs.map(v => v.cia || v.cia_nome).filter(Boolean)).size, null, [2, 3, 5, 10, 20]));
+    lista.push(selo('companhias', 'Voos', ICONES.aeroporto, 'Companhias', new Set(vs.map(chaveCia).filter(Boolean)).size, null, [2, 3, 5, 10, 20]));
     lista.push(selo('modelos', 'Voos', ICONES.aeroporto, 'Modelos de avião', new Set(vs.map(v => v.modelo).filter(Boolean)).size, null, [2, 3, 5, 10, 20]));
   }
   try {
@@ -3238,7 +3243,33 @@ async function abreCard() {
 // Cada voo: data, número, companhia, origem e destino (IATA), horários locais, avião e matrícula.
 // A busca pelo número e data usa a AeroDataBox pela função "voo" do Supabase (a chave fica lá).
 let promCias, promModelos;
-const carregaCias = () => promCias ||= fetch('aerolinhas.json').then(r => r.json()).catch(e => { promCias = null; throw e; });
+const carregaCias = () => { carregaHistCias(); return promCias ||= fetch('aerolinhas.json').then(r => r.json()).catch(e => { promCias = null; throw e; }); };
+// Histórico das companhias (Wikidata): qual empresa usava o código na data do voo e o logo dela na época.
+// Uma empresa que só trocou de nome ou de logo (TAM → LATAM Brasil, Gol) continua sendo uma companhia só.
+let promHist;
+const carregaHistCias = () => promHist ||= fetch('cias-historico.json').then(r => r.json()).then(h => { S.histCias = h || {}; agendaSelos(); return S.histCias; }).catch(() => (S.histCias = {}));
+const primeiraPalavra = t => norm(t || '').replace(/[^a-z0-9]+/g, ' ').trim().split(' ')[0] || '';
+function empresaDoVoo(v) {
+  const l = S.histCias?.[v.cia]; if (!l?.length || !v.data) return null;
+  const naData = l.filter(e => (!e.i || e.i <= v.data) && (!e.f || v.data <= e.f)); if (!naData.length) return null;
+  const p = primeiraPalavra(v.cia_nome);
+  return (p && naData.find(e => primeiraPalavra(e.n) === p || norm(e.n).includes(p))) || naData.find(e => !e.f) || naData[0];
+}
+const chaveCia = v => empresaDoVoo(v)?.q || v.cia || v.cia_nome || '';
+const urlCommons = f => `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(f)}?width=240`;
+// logo da época: logo com datas que cobrem o voo; empresa extinta usa o logo dela; empresa ativa usa o logo
+// de hoje só se o nome não mudou desde o voo. Sem nada disso, null (o app mostra o selo com o nome).
+function logoVoo(v, cias) {
+  if (!v.cia) return null;
+  const mesmoNome = !v.cia_nome || !cias?.[v.cia] || primeiraPalavra(v.cia_nome) === primeiraPalavra(cias[v.cia]);
+  const e = empresaDoVoo(v);
+  if (!e) return (!S.histCias?.[v.cia] || mesmoNome) ? logoCia(v) : null;
+  const logos = e.l || [];
+  const datado = logos.find(([, a, b]) => (a || b) && (!a || a <= v.data) && (!b || v.data <= b));
+  if (datado) return urlCommons(datado[0]);
+  if (e.f) { const sem = logos.find(([, a, b]) => !a && !b) || logos.at(-1); return sem ? urlCommons(sem[0]) : null; }
+  return mesmoNome ? logoCia(v) : null;
+}
 const carregaModelos = () => promModelos ||= fetch('aeronaves.json').then(r => r.json()).catch(e => { promModelos = null; throw e; });
 const aeroPorIata = iata => (S.baseAero || []).find(b => b.iata === iata);
 const kmVoo = v => { const a = aeroPorIata(v.origem), b = aeroPorIata(v.destino); return a && b ? Math.round(distKm(a.lat, a.lon, b.lat, b.lon)) : 0; };
@@ -3464,8 +3495,11 @@ function desenhaRotas() {
 }
 // ---- Passaporte de voos: capa, rotas, carimbos, recordes, companhias, aviões, viagens e anos
 // cores que lembram cada companhia (o logo vem de um banco público; sem ele, fica a faixa colorida)
-const COR_CIA = { G3: '#ff6a13', AD: '#0b3d91', JJ: '#c8102e', LA: '#1b0088', '4M': '#1b0088', AR: '#0f6db3', TP: '#d71920', CM: '#003a70', AV: '#da291c', H2: '#ff4f00', JA: '#1e2a78', FO: '#ffc600', AA: '#0078d2', UA: '#005daa', DL: '#c8102e', AF: '#002157', KL: '#00a1de', IB: '#d7192d', UX: '#00539f', LH: '#05164d', BA: '#075aaa', EK: '#d71921', QR: '#5c0632', TK: '#c70a0c', '2Z': '#0f4c81' };
-const corCia = v => COR_CIA[v.cia] || '#5b6f71';
+const COR_CIA = { G3: '#ff6a13', AD: '#0b3d91', JJ: '#1b0088', LA: '#1b0088', '4M': '#1b0088', AR: '#0f6db3', TP: '#d71920', CM: '#003a70', AV: '#da291c', H2: '#ff4f00', JA: '#1e2a78', FO: '#ffc600', AA: '#0078d2', UA: '#005daa', DL: '#c8102e', AF: '#002157', KL: '#00a1de', IB: '#d7192d', UX: '#00539f', LH: '#05164d', BA: '#075aaa', EK: '#d71921', QR: '#5c0632', TK: '#c70a0c', '2Z': '#0f4c81' };
+// cor da época quando a marca era outra (TAM era vermelha; o JJ hoje é LATAM)
+const COR_ERA = { tam: '#c8102e', varig: '#1e4d9c', vasp: '#0a3d8f', webjet: '#d71920', avianca: '#d71920', transbrasil: '#0072bc' };
+const corCia = v => COR_ERA[primeiraPalavra(v.cia_nome)] || COR_CIA[v.cia] || '#5b6f71';
+const seloCia = (nome, cor, peq) => `<span class="logo selo-cia${peq ? ' peq' : ''}" style="--c:${cor}">${esc(nome.length > 12 ? nome.split(' ')[0] : nome)}</span>`;
 // logo atual pelo código (TAM aparece com o logo de hoje, LATAM, mas com o nome da época)
 const logoCia = v => v.cia ? `https://pics.avs.io/200/80/${encodeURIComponent(v.cia)}.png` : null;
 const CORES_PAIS = ['#1f7a4d', '#2b7bb9', '#8e44ad', '#c0392b', '#d35400', '#16a085', '#7d5a2b', '#2c3e50', '#b8860b', '#6d4c9f'];
@@ -3519,7 +3553,7 @@ async function htmlPassaporte() {
   const paisCasa = casa()?.pais || 'BR', paisesOrd = [...new Set([paisCasa, ...[...primeira.keys()].map(i => aeroPorIata(i)?.pais).filter(Boolean)])];
   const corPais = cc => CORES_PAIS[paisesOrd.indexOf(cc) % CORES_PAIS.length];
   const paises = new Set([...primeira.keys()].map(i => aeroPorIata(i)?.pais).filter(Boolean));
-  const ciasDist = new Set(vs.map(v => v.cia_nome || v.cia).filter(Boolean)), avioes = new Set(vs.map(v => v.matricula).filter(Boolean));
+  const ciasDist = new Set(vs.map(chaveCia).filter(Boolean)), avioes = new Set(vs.map(v => v.matricula).filter(Boolean));
   const capa = `<div class="pp-capa"><div class="pp-selo">${ICONES.aeroporto}<div><small>PASSAPORTE DE VOOS</small><b>POR ONDE ANDEI</b></div></div>
     <div class="pp-nums"><div><b>${vs.length}</b><span>${vs.length === 1 ? 'voo' : 'voos'}</span></div><div><b>${km.toLocaleString('pt-BR')}</b><span>km voados</span></div><div><b>${fmtHoras(min)}</b><span>no ar${estimado ? ' (aprox.)' : ''}</span></div>
     <div><b>${primeira.size}</b><span>aeroportos</span></div><div><b>${paises.size}</b><span>${paises.size === 1 ? 'país' : 'países'}</span></div><div><b>${(km / 40075).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b><span>voltas na Terra</span></div></div>
@@ -3542,9 +3576,23 @@ async function htmlPassaporte() {
     ${curto && curto !== longo ? rec('Mais curto', `${esc(curto.origem)} → ${esc(curto.destino)}`, `${fmtKm(kmVoo(curto))} · ${fmtHoras(minVoo(curto))}${curto.numero ? ' · ' + esc(curto.numero) : ''}`) : ''}
     ${cedo ? rec('Mais cedo', esc(cedo.partida), `${esc([cedo.numero, `${cedo.origem} → ${cedo.destino}`, dataCurta(cedo.data)].filter(Boolean).join(' · '))}`) : ''}
     ${fav && fav[1] > 1 ? rec('Rota favorita', esc(fav[0]), `${fav[1]} voos`) : ''}</div>`;
-  const porCia = new Map(); vs.forEach(v => { const k = nomeCia(v, cias); if (!porCia.has(k)) porCia.set(k, []); porCia.get(k).push(v); });
-  const companhias = [...porCia].sort((a, b) => b[1].length - a[1].length).map(([nome, l]) => { const v = l[0], cor = corCia(v), logo = logoCia(v);
-    return `<div class="pp-cia" style="--c:${cor}"><span class="faixa"></span>${logo ? `<span class="logo"><img src="${logo}" alt="" loading="lazy" onerror="this.parentElement.remove()"></span>` : ''}<div><b>${esc(nome)}</b><small>${esc([v.cia, pl(l.length, 'voo', 'voos'), fmtKm(l.reduce((t, x) => t + kmVoo(x), 0))].filter(Boolean).join(' · '))}</small></div><span class="n">${l.length}</span></div>`; }).join('');
+  await carregaHistCias();
+  const porCia = new Map(); vs.forEach(v => { const k = chaveCia(v); if (!porCia.has(k)) porCia.set(k, []); porCia.get(k).push(v); });
+  const companhias = [...porCia].sort((a, b) => b[1].length - a[1].length).map(([, l]) => {
+    const ord = [...l].sort((a, b) => b.data.localeCompare(a.data)), v = ord[0], nome = nomeCia(v, cias), cor = corCia(v), e = empresaDoVoo(v);
+    // título = nome do voo mais recente; os nomes antigos e o nome de hoje ficam na linha de baixo
+    const antes = [...new Set(ord.map(x => nomeCia(x, cias)))].filter(n => primeiraPalavra(n) !== primeiraPalavra(nome));
+    const atual = cias?.[v.cia];
+    const nota = e?.f ? `encerrou em ${e.f.slice(0, 4)}` : atual && v.cia_nome && primeiraPalavra(atual) !== primeiraPalavra(nome) ? `hoje ${atual}` : '';
+    const logo = logoVoo(v, cias);
+    // épocas com logo ou nome diferentes (Gol 2012 × Gol 2026, TAM × LATAM): uma linha para cada
+    const eras = new Map(); ord.forEach(x => { const lg = logoVoo(x, cias), nm = nomeCia(x, cias), k = lg || 'selo:' + nm;
+      if (!eras.has(k)) eras.set(k, { lg, nm, cor: corCia(x), anos: new Set(), n: 0 }); const r = eras.get(k); r.anos.add(x.data.slice(0, 4)); r.n++; });
+    const faixaAnos = s => { const a = [...s].sort(); return a.length > 1 ? `${a[0]}–${a.at(-1)}` : a[0]; };
+    const erasHtml = eras.size > 1 ? `<div class="pp-eras">${[...eras.values()].map(r => `<span>${r.lg ? `<img src="${r.lg}" alt="" loading="lazy">` : seloCia(r.nm, r.cor, true)}${faixaAnos(r.anos)} · ${pl(r.n, 'voo', 'voos')}</span>`).join('')}</div>` : '';
+    const linha2 = [[antes.length ? 'antes ' + antes.join(', ') : '', nota].filter(Boolean).join(' · '), [v.cia, pl(l.length, 'voo', 'voos'), fmtKm(l.reduce((t, x) => t + kmVoo(x), 0))].filter(Boolean).join(' · ')].filter(Boolean).join(' — ');
+    return `<div class="pp-cia" style="--c:${cor}"><span class="faixa"></span>${logo ? `<span class="logo" data-selo="${esc(seloCia(nome, cor))}"><img src="${logo}" alt="" loading="lazy" onerror="this.parentElement.outerHTML=this.parentElement.dataset.selo"></span>` : seloCia(nome, cor)}<div><b>${esc(nome)}</b><small>${esc(linha2)}</small>${erasHtml}</div><span class="n">${l.length}</span></div>`;
+  }).join('');
   const porModelo = new Map(); vs.forEach(v => { const k = v.modelo || 'Avião não informado'; if (!porModelo.has(k)) porModelo.set(k, []); porModelo.get(k).push(v); });
   let nFoto = 0;
   const aviaoHtml = [...porModelo].sort((a, b) => (a[0] === 'Avião não informado') - (b[0] === 'Avião não informado') || b[1].length - a[1].length).map(([mod, l]) => {
@@ -3571,7 +3619,7 @@ async function htmlPassaporte() {
     <h4 class="pp-h">Companhias</h4>${companhias}
     <h4 class="pp-h">Aviões <small>toque para ver as fotos</small></h4>${aviaoHtml}
     <h4 class="pp-h">Por viagem</h4>${viagens}
-    <p class="meta pp-nota">Distâncias em linha reta pela curva da Terra.${estimado ? ' Sem horário registrado, o tempo é estimado pela distância.' : ''} Fotos: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a> (pela matrícula) ou Wikipédia (pelo modelo), com o crédito de cada foto. Logos das companhias: Travelpayouts. Busca de voos: AeroDataBox e ANAC (VRA).</p>`;
+    <p class="meta pp-nota">Distâncias em linha reta pela curva da Terra.${estimado ? ' Sem horário registrado, o tempo é estimado pela distância.' : ''} Fotos: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a> (pela matrícula) ou Wikipédia (pelo modelo), com o crédito de cada foto. Logos das companhias: Travelpayouts e Wikimedia Commons (logos de época, via Wikidata). Busca de voos: AeroDataBox e ANAC (VRA).</p>`;
 }
 // ---- Carteira do Google: cartão "Passaporte de voos" (função carteira no servidor)
 function resumoCarteira() {
@@ -3579,7 +3627,7 @@ function resumoCarteira() {
   if (!vs.length || !S.baseAero) return null;
   const km = vs.reduce((t, v) => t + kmVoo(v), 0), min = vs.reduce((t, v) => t + minVoo(v), 0);
   const aps = new Set(vs.flatMap(v => [v.origem, v.destino])), paises = new Set([...aps].map(i => aeroPorIata(i)?.pais).filter(Boolean));
-  const cias = new Set(vs.map(v => v.cia_nome || v.cia).filter(Boolean));
+  const cias = new Set(vs.map(chaveCia).filter(Boolean));
   const u = vs.at(-1), longo = [...vs].sort((a, b) => kmVoo(b) - kmVoo(a))[0];
   const mods = new Map(); vs.forEach(v => v.modelo && mods.set(v.modelo, (mods.get(v.modelo) || 0) + 1));
   const a0 = vs[0].data.slice(0, 4), a1 = u.data.slice(0, 4);
