@@ -5,7 +5,7 @@ on:
     - cron: '0 9 5 * *'   # todo dia 5: cada fonte entra assim que publica; só grava se algo mudou
   push:
     branches: [main]
-    paths: ['scripts/ranking_aeroportos.py', 'scripts/regioes.py', 'scripts/museus.py', 'scripts/cidades.py', 'scripts/bases_fixas.py', '.github/workflows/ranking-aeroportos.yml']
+    paths: ['scripts/ranking_aeroportos.py', 'scripts/regioes.py', 'scripts/museus.py', 'scripts/cidades.py', 'scripts/bases_fixas.py', 'scripts/voos_bases.py', '.github/workflows/ranking-aeroportos.yml']
 permissions:
   contents: write
 jobs:
@@ -26,5 +26,5 @@ jobs:
         run: |
           git config user.name "Claude"
           git config user.email "noreply@anthropic.com"
-          git add ranking-aeroportos.json museus.json cidades-pop.json cidades-mundo.json aeroportos.json municipios-br.json aerolinhas.json aeronaves.json scripts/ranking-log.txt
+          git add ranking-aeroportos.json museus.json cidades-pop.json cidades-mundo.json aeroportos.json municipios-br.json aerolinhas.json aeronaves.json scripts/ranking-log.txt; [ -f cias-historico.json ] && git add cias-historico.json || true
           git diff --cached --quiet || (git commit -m "Atualiza bases (rankings, museus, cidades, aeroportos e municípios)" && git push)
