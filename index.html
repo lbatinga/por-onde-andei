@@ -420,6 +420,14 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .grupo-pinos div { width: 36px; height: 36px; border-radius: 50%; background: var(--visit); color: #fff; font: 700 13px/36px var(--f-body); text-align: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
 .filtro-rot, .filtro-limpa { border: 1px solid transparent; background: none; color: var(--muted); font-size: .8rem; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 99px; }
 .filtro-rot[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; background: var(--surface); }
+.ajuda-rot { margin-left: auto; flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--muted); background: none; color: var(--muted); font: 800 .8rem var(--f-body); display: grid; place-items: center; padding: 0; }
+.ajuda-lista { display: grid; gap: 10px; margin: 4px 0 12px; }
+.ajuda-lista div { display: flex; gap: 10px; align-items: flex-start; }
+.ajuda-lista i { flex: none; width: 16px; height: 16px; border-radius: 4px; border: 2px solid var(--c); margin-top: 2px; }
+.vazio-acao { text-align: center; padding: 18px 8px 10px; }
+.vazio-acao .e { font-size: 2.2rem; }
+.vazio-acao b { display: block; margin: 6px 0 4px; font-size: 1.05rem; }
+.vazio-acao p { margin: 0 auto 16px; color: var(--muted); max-width: 320px; }
 .filtro-rot i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--c); }
 .filtro-rot[aria-pressed="true"] i { background: var(--c); }
 .filtro-limpa { color: var(--accent); font-weight: 700; }
@@ -1561,7 +1569,8 @@ function renderLista() {
   $('#cab-rotulos').hidden = false;
   if (S.filtroRot && !S.rotulos.some(r => r.id === S.filtroRot)) S.filtroRot = null;
   $('#cab-rotulos').innerHTML = (aba === 'paises' || aba === 'estados') ? COLS_RESUMO.map(([t, nome]) => `<span class="leg">${ICONES[t]}${nome}</span>`).join('') : rotulosDaAba(aba).map(r => `<button class="filtro-rot" data-filtro-rot="${r.id}" aria-pressed="${S.filtroRot === r.id}" title="Mostrar só ${esc(r.nome)}"><i style="--c:${esc(r.cor)}"></i>${esc(r.nome)}</button>`).join('')
-    + (S.filtroRot ? '<button class="filtro-limpa" data-filtro-rot="">Mostrar todos</button>' : '');
+    + (S.filtroRot ? '<button class="filtro-limpa" data-filtro-rot="">Mostrar todos</button>' : '')
+    + ((aba === 'paises' || aba === 'estados') ? '' : '<button class="ajuda-rot" data-ajuda-rot="1" aria-label="O que cada marca quer dizer" title="O que cada marca quer dizer">?</button>');
   const titulos = { paises: 'Países', estados: 'Estados e províncias', transporte: 'Aeroportos' };
   $('#painel-titulo').textContent = titulos[aba] || TIPOS[aba].nome;
   let html = '';
@@ -2760,8 +2769,29 @@ async function verificaSelos() {
   const subiram = lista.filter(s => s.nivel > (antes[s.id] ?? 0)).sort((a, b) => b.nivel - a.nivel);
   if (subiram.length) toast(`🏅 Novo selo: ${subiram[0].nome} · ${NOME_NIVEL[subiram[0].atual]}${subiram.length > 1 ? ` (e mais ${subiram.length - 1})` : ''}`, 4000);
 }
+// "?" da legenda: o que cada rótulo faz, a partir da configuração de cada um (vale para rótulos criados pela pessoa)
+function ajudaRotulos() {
+  const faz = r => r.conta_como_visita ? 'pinta o mapa e conta nas estatísticas'
+    : r.so_lugar ? 'conta o lugar, mas não pinta o país nem o estado (ex.: aeroporto de conexão)'
+    : norm(r.nome) === 'quero ir' ? 'sua lista de desejos; não pinta o mapa'
+    : 'marcação pessoal; dá para usar junto com as outras e não pinta o mapa sozinha';
+  abreModal(`<h3>O que cada marca quer dizer</h3>
+    <div class="ajuda-lista">${S.rotulos.map(r => `<div style="--c:${esc(r.cor)}"><i></i><span><b>${esc(r.nome)}</b> · ${esc(faz(r))}${r.tipos?.length ? ` <small class="meta">(só em ${esc(r.tipos.map(t => TIPOS[t]?.curto.toLowerCase() || t).join(', '))})</small>` : ''}</span></div>`).join('')}</div>
+    <p class="meta">Toque na caixinha ao lado do lugar para ligar ou desligar. Toque no nome na legenda para mostrar só aquele. Para criar, renomear ou mudar cor: Menu › Rótulos.</p>
+    <div class="acoes"><button class="btn principal" id="ar-ok">Entendi</button></div>`, (m, fechar) => { m.querySelector('#ar-ok').onclick = fechar; });
+}
+// Bandeiras e Estatísticas numa conta sem nada marcado: um convite em vez da tela de zeros
+function modalVazio(titulo, emoji, chamada, texto, botao) {
+  abreModal(`<h3>${esc(titulo)}</h3><div class="vazio-acao"><div class="e">${emoji}</div><b>${esc(chamada)}</b><p>${esc(texto)}</p>
+    <button class="btn principal" id="va-ir">${esc(botao)}</button></div>
+    <div class="acoes"><button class="btn" id="va-fechar">Fechar</button></div>`, (m, fechar) => {
+    m.querySelector('#va-fechar').onclick = fechar;
+    m.querySelector('#va-ir').onclick = () => { fechar(); abreMarcacaoRapida(); };
+  });
+}
 function abreEstatisticas() {
   calcula();
+  if (!S.publico && !paisesVis.size) return modalVazio('Estatísticas', '📊', 'Ainda não tem o que contar', 'Área do mundo, continentes, distâncias e selos aparecem assim que você marcar onde já esteve.', 'Marcar países e estados');
   const vis = idsVisita(), visitados = S.lugares.filter(l => visitado(l.id, vis));
   const areaMundo = S.paises.reduce((t, p) => t + areaFeicao(p), 0);
   const areaEst = [...estadosVis].reduce((t, id) => t + (S.estadoPorId.get(id) ? areaFeicao(S.estadoPorId.get(id)) : 0), 0);
@@ -2941,6 +2971,7 @@ const urlBandeira = arq => `https://commons.wikimedia.org/wiki/Special:FilePath/
 let albumCompleto = (() => { try { return localStorage.getItem('poa-album') !== '0'; } catch { return true; } })();
 async function abreBandeiras(abaInicial = 'paises') {
   calcula();
+  if (!S.publico && !paisesVis.size && !paisesQuero.size) return modalVazio('Minhas bandeiras', '🏳️', 'Sua coleção começa aqui', 'Cada país onde você esteve ganha a bandeira nesta tela.', 'Marcar países onde já estive');
   const vis = idsVisita();
   const ord = ids => [...ids].sort((a, b) => nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
   // classe do cartão: visitado, quero ir ou falta (cinza, só no álbum completo)
@@ -3977,6 +4008,7 @@ function montaApp() {
   $('#ordem').addEventListener('change', e => { guardaOrdem(S.aba, e.target.value); if (e.target.value === 'perto') pedeMinhaPos(); renderLista(); });
   if (Object.values((() => { try { return JSON.parse(localStorage.getItem('poa-ordem') || '{}'); } catch { return {}; } })()).includes('perto')) pedeMinhaPos();
   $('#cab-rotulos').addEventListener('click', e => {
+    if (e.target.closest('[data-ajuda-rot]')) return ajudaRotulos();
     const b = e.target.closest('[data-filtro-rot]'); if (!b) return;
     S.filtroRot = b.dataset.filtroRot && S.filtroRot !== b.dataset.filtroRot ? b.dataset.filtroRot : null;
     atualizaTudo();
