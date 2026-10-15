@@ -3282,7 +3282,7 @@ const fabricante = modelo => { const m = (modelo || '').trim(); if (!m) return n
 const cidadeAero = iata => { const a = aeroPorIata(iata); return a ? (a.sub.split(' · ')[1] || '').split(',')[0] : ''; };
 const ordemVoos = () => [...(S.voos || [])].sort((a, b) => b.data.localeCompare(a.data) || (b.partida || '').localeCompare(a.partida || ''));
 function abreVoos() {
-  Promise.all([carregaBase('aeroporto'), carregaCias()]).catch(() => {}).then(async () => {
+  Promise.all([carregaBase('aeroporto'), carregaCias(), carregaHistCias()]).catch(() => {}).then(async () => {
     const cias = await carregaCias().catch(() => ({}));
     const desenhar = m => {
       const vs = ordemVoos(), anos = new Map();
@@ -3499,7 +3499,7 @@ function desenhaRotas() {
 // cores que lembram cada companhia (o logo vem de um banco público; sem ele, fica a faixa colorida)
 const COR_CIA = { G3: '#ff6a13', AD: '#0b3d91', JJ: '#1b0088', LA: '#1b0088', '4M': '#1b0088', AR: '#0f6db3', TP: '#d71920', CM: '#003a70', AV: '#da291c', H2: '#ff4f00', JA: '#1e2a78', FO: '#ffc600', AA: '#0078d2', UA: '#005daa', DL: '#c8102e', AF: '#002157', KL: '#00a1de', IB: '#d7192d', UX: '#00539f', LH: '#05164d', BA: '#075aaa', EK: '#d71921', QR: '#5c0632', TK: '#c70a0c', '2Z': '#0f4c81' };
 // cor da época quando a marca era outra (TAM era vermelha; o JJ hoje é LATAM)
-const COR_ERA = { tam: '#c8102e', varig: '#1e4d9c', vasp: '#0a3d8f', webjet: '#d71920', avianca: '#d71920', transbrasil: '#0072bc' };
+const COR_ERA = { tam: '#c8102e', varig: '#1e4d9c', vasp: '#0a3d8f', webjet: '#d71920', avianca: '#d71920', oceanair: '#d71920', transbrasil: '#0072bc' };
 const corCia = v => COR_ERA[primeiraPalavra(v.cia_nome)] || COR_CIA[v.cia] || '#5b6f71';
 const seloCia = (nome, cor, peq) => `<span class="logo selo-cia${peq ? ' peq' : ''}" style="--c:${cor}">${esc(nome.length > 12 ? nome.split(' ')[0] : nome)}</span>`;
 // logo atual pelo código (TAM aparece com o logo de hoje, LATAM, mas com o nome da época)
