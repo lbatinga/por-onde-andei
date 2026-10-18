@@ -10,6 +10,20 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<!-- Sentry: avisa dos erros que acontecem no celular de quem usa (sem e-mail nem dados pessoais) -->
+<script src="https://browser.sentry-cdn.com/10.75.3/bundle.min.js" crossorigin="anonymous"></script>
+<script>
+  try {
+    const producao = /vercel\.app$/.test(location.hostname);
+    if (window.Sentry && producao) Sentry.init({
+      dsn: 'https://83c93a952415462ac07fdff041756402@o4512279478534144.ingest.us.sentry.io/4512279486922752',
+      environment: 'producao', sendDefaultPii: false, tracesSampleRate: 0,
+      // falhas de rede e avisos inofensivos do navegador não são erro do app
+      ignoreErrors: ['ResizeObserver loop', 'Failed to fetch', 'Load failed', 'NetworkError', 'AbortError', 'The operation was aborted'],
+      denyUrls: [/extensions\//i, /^chrome-extension:\/\//i, /^moz-extension:\/\//i],
+    });
+  } catch {}
+</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
@@ -715,6 +729,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const bandeira = cc => (cc && /^[A-Z]{2}$/.test(cc)) ? String.fromCodePoint(...[...cc].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) : '🏳️';
 function toast(msg, ms = 2600, acao) {
+  try { if (/^(Erro|Não deu|Não consegui|Uma alteração feita sem internet não)/.test(msg)) window.Sentry?.captureMessage(msg, 'warning'); } catch {}
   document.querySelectorAll('.toast.com-acao').forEach(x => x.remove());
   const t = document.createElement('div'); t.className = 'toast' + (acao ? ' com-acao' : '');
   t.textContent = msg;
@@ -3867,6 +3882,7 @@ let iniciado = false;
 async function entrar(user) {
   if (iniciado) return; iniciado = true;
   S.user = user;
+  try { window.Sentry?.setUser({ id: user.id }); } catch {}
   $('#tela-login').hidden = true; $('#carregando').hidden = false;
   await sincroniza().catch(() => {});
   try {

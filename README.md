@@ -52,6 +52,10 @@ Companhias: uma companhia é uma **empresa**, não uma marca. TAM e LATAM Brasil
 
 Função `carteira` (Generic pass): classe `poa_passaporte_v1` e um cartão por usuário (`voos_<id>`). Chaves em `viagem_segredos` (`GOOGLE_WALLET_ISSUER`, `GOOGLE_WALLET_SA`). A imagem do cartão vem do bucket público `carteira`, só da pasta do próprio usuário. O emissor ainda está em modo de teste: só contas de teste conseguem salvar o cartão.
 
+## Erros (Sentry)
+
+O app manda para o Sentry (projeto `por-onde-andei`, organização `batinga`) os erros que acontecem no uso real, só no endereço de produção (`*.vercel.app`): erros de JavaScript e as mensagens de erro mostradas na tela ("Erro…", "Não deu…"). Vai só o id do usuário, nunca e-mail ou dados das viagens. Falhas de rede comuns são ignoradas.
+
 ## Compartilhar e fotos
 
 - `viagem_compartilhar` guarda um token por pessoa; `/?v=<token>` abre em modo visitante pela função `viagem_publico(token)`, sem notas, datas nem fotos. Desmarcar "Link ativo" corta o acesso na hora.
