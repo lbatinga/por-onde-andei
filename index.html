@@ -452,7 +452,7 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .resumo .nota { white-space: pre-line; }
 .resumo .selos { display: flex; gap: 4px; flex-wrap: wrap; }
 .resumo .btn { padding: 6px 12px; justify-self: start; }
-.viagem-card { display: grid; gap: 2px; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+.viagem-card { display: grid; gap: 2px; width: 100%; margin-bottom: 8px; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
 .viagem-card small, .sugestao small { color: var(--muted); }
 .sugestao { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .sugestao span { min-width: 0; display: grid; }
@@ -532,8 +532,6 @@ body:not(.publico) .fundo { bottom: calc(var(--nav-h) + env(safe-area-inset-bott
 .trecho span { white-space: nowrap; }
 .trecho.local span { font-style: italic; }
 .trecho select { width: auto; flex: 0 0 auto; padding: 3px 6px; border: 1px dashed var(--line); border-radius: 99px; background: transparent; color: var(--ink); font: inherit; font-size: .8rem; }
-.resumo-import { background: var(--surface-2); border-radius: 8px; padding: 12px; font-size: .9rem; display: grid; gap: 4px; }
-.resumo-import ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); max-height: 180px; overflow: auto; }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; background: var(--ink); color: var(--bg);
   padding: 10px 16px; border-radius: 999px; z-index: 3000; font-size: .9rem; box-shadow: 0 6px 18px rgba(0,0,0,.3); max-width: calc(100% - 32px); }
 
@@ -1253,7 +1251,6 @@ const visitasDe = id => (S.visitas || []).filter(v => v.lugar_id === id).sort((a
 /* ================= Mapa ================= */
 let mapa, camadaPaises, camadaEstados, camadaPinos, camadaRotPaises, camadaRotEstados, fundo;
 function corToken(nome) { return getComputedStyle(document.documentElement).getPropertyValue(nome).trim(); }
-function escuro() { return false; }
 // Mapa de fundo: OpenFreeMap (vetorial, sem chave), com todos os nomes trocados para português
 async function estiloEmPortugues() {
   for (const nome of ['liberty', 'positron']) {
@@ -1705,7 +1702,7 @@ const cidadeJaCadastrada = m => S.lugares.find(l => l.tipo === 'cidade' && (l.re
 /* ================= Formulário de lugar ================= */
 function formLugar({ titulo, l, rotSel, aoSalvar, aoExcluir, sugestoes }) {
   const loc = localizar(l.lat, l.lon, l.pais);
-  const opcoesTipo = Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${l.tipo === k ? 'selected' : ''}>${v.um}</option>`).join('');
+  const opcoesTipo = Object.entries(TIPOS).filter(([k]) => !['pais', 'estado'].includes(k) || l.tipo === k).map(([k, v]) => `<option value="${k}" ${l.tipo === k ? 'selected' : ''}>${v.um}</option>`).join('');
   const chips = S.rotulos.map(r => `<button type="button" class="chip" style="--c:${esc(r.cor)}" data-r="${r.id}" aria-pressed="${rotSel.has(r.id)}" ${rotuloServe(r, l.tipo || 'cidade') || rotSel.has(r.id) ? '' : 'hidden'}>${esc(r.nome)}</button>`).join('');
   abreModal(`
     <h3>${esc(titulo)}</h3>
@@ -2122,13 +2119,26 @@ function abreRotulos() {
       div.querySelector('input[type=text]').onchange = e => { const n = e.target.value.trim(); if (n) salvar({ nome: n }); else e.target.value = r.nome; };
       div.querySelector('select.onde').onchange = e => salvar({ tipos: e.target.value ? [e.target.value] : null });
       div.querySelector('select.conta:not(.onde)').onchange = e => salvar({ conta_como_visita: e.target.value === 'visita', so_lugar: e.target.value === 'lugar' });
-      botaoDuploToque(div.querySelector('.perigo'), async () => {
+      // excluir um rótulo tira ele de todos os lugares (o banco apaga as marcações junto): mostra quantos,
+      // não deixa apagar o último que pinta o mapa e guarda tudo para o Desfazer
+      const usos = [...S.lr].filter(([, mm]) => mm.has(r.id)).map(([lid, mm]) => ({ lugar_id: lid, rotulo_id: r.id, data: mm.get(r.id) ?? null }));
+      const ultimoVisita = r.conta_como_visita && S.rotulos.filter(x => x.conta_como_visita).length === 1;
+      const btEx = div.querySelector('.perigo');
+      if (ultimoVisita) { btEx.onclick = () => toast(`“${r.nome}” é o único rótulo que pinta o mapa. Crie outro que conte como visitado antes de excluir este.`, 5000); }
+      else botaoDuploToque(btEx, async () => {
+        const copia = { ...r };
         const { error } = await supa.from('viagem_rotulos').delete().eq('id', r.id);
         if (error) return toast('Erro: ' + error.message);
         S.rotulos = S.rotulos.filter(x => x.id !== r.id);
         for (const [k, mm] of S.lr) { mm.delete(r.id); if (!mm.size) S.lr.delete(k); }
         atualizaTudo(); desenhar(m);
-      }, 'Confirmar');
+        toast(`Rótulo “${copia.nome}” excluído${usos.length ? ` de ${usos.length} ${usos.length === 1 ? 'lugar' : 'lugares'}` : ''}`, 8000, { rotulo: 'Desfazer', fn: async () => {
+          const { user_id, criado_em, ...reg } = copia;
+          const { error: e1 } = await supa.from('viagem_rotulos').insert(reg); if (e1) return toast('Não deu pra desfazer: ' + e1.message);
+          for (let i = 0; i < usos.length; i += 500) { const { error: e2 } = await supa.from('viagem_lugar_rotulos').insert(usos.slice(i, i + 500)); if (e2) return toast('Rótulo voltou, mas algumas marcações não: ' + e2.message); }
+          await carregaDados(); atualizaTudo(); desenhar(m); toast(`“${copia.nome}” voltou`);
+        } });
+      }, usos.length ? `Tirar de ${usos.length} ${usos.length === 1 ? 'lugar' : 'lugares'}? Toque de novo` : 'Confirmar');
     });
   };
   abreModal(`
@@ -2146,131 +2156,6 @@ function abreRotulos() {
       const { data, error } = await supa.from('viagem_rotulos').insert({ nome, cor: m.querySelector('#novo-cor').value, ordem }).select().single();
       if (error) return toast('Erro: ' + (error.code === '23505' ? 'já existe um rótulo com esse nome' : error.message));
       S.rotulos.push(data); m.querySelector('#novo-rot').value = ''; desenhar(m); atualizaTudo();
-    };
-  });
-}
-
-/* ================= Importação do Places Been ================= */
-// Ajustes conhecidos do export (nome em inglês, tipo errado, duplicados)
-const CORRECOES = [
-  { em: /airport|airpark|aeroparque|aeropuerto/i, tipo: 'aeroporto' },
-  { em: /historic cent|national park|world heritage|unesco/i, tipo: 'unesco' },
-];
-const NOMES_PT = {
-  'guarulhos governador andre franco montoro international airport': ['Aeroporto Internacional de Guarulhos (GRU)', 'iata:GRU'],
-  'presidente juscelino kubistschek international airport': ['Aeroporto Internacional de Brasília (BSB)', 'iata:BSB'],
-  'presidente juscelino kubitschek international airport': ['Aeroporto Internacional de Brasília (BSB)', 'iata:BSB'],
-  'tancredo neves international airport': ['Aeroporto Internacional de Confins (CNF)', 'iata:CNF'],
-  'afonso pena airport': ['Aeroporto Internacional Afonso Pena (CWB)', 'iata:CWB'],
-  'zumbi dos palmares airport': ['Aeroporto Internacional Zumbi dos Palmares (MCZ)', 'iata:MCZ'],
-  'jorge newbery airpark': ['Aeroparque Jorge Newbery (AEP)', 'iata:AEP'],
-  'historic centre of the town of olinda': ['Centro Histórico de Olinda', 'unesco:189'],
-  'la boca': ['La Boca (Caminito)', null, 'atracao'],
-};
-// Não são municípios (povoado / região administrativa): ficam fora
-const IGNORAR = ['porto da rua', 'gama'];
-// No Places Been, "Brasilia" sem acento nesse ponto é o patrimônio da UNESCO (Plano Piloto)
-const ESPECIAIS = [{ nome: 'brasilia', lat: -15.78333, lon: -47.9, vira: ['Plano Piloto de Brasília', 'unesco', 'unesco:445'] }];
-function lerCSV(txt) {
-  const linhas = txt.replace(/^﻿/, '').split(/\r?\n/).filter(x => x.trim());
-  const sep = linhas[0].includes(';') ? ';' : ',';
-  const cel = l => { const out = []; let cur = '', q = false; for (let i = 0; i < l.length; i++) { const c = l[i];
-    if (q) { if (c === '"' && l[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
-    else if (c === '"') q = true; else if (c === sep) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; };
-  const cab = cel(linhas[0]).map(h => h.trim().toLowerCase());
-  return linhas.slice(1).map(l => { const v = cel(l); const o = {}; cab.forEach((h, i) => o[h] = (v[i] || '').trim()); return o; });
-}
-function preparaImportacao(linhas) {
-  const notas = [], novos = [];
-  const rotPorStatus = { been: S.rotulos.find(r => r.conta_como_visita) || S.rotulos[0], want: S.rotulos.find(r => norm(r.nome) === 'quero ir'), fave: S.rotulos.find(r => norm(r.nome) === 'favorito') };
-  const brutos = linhas.map(x => ({ nomeOrig: x.city || x.name || '', lat: parseFloat(x.lat), lon: parseFloat(x.lon), pais: (x.country || '').toUpperCase(), status: (x.been || '').split(',').map(s => s.trim()).filter(Boolean) }))
-    .filter(x => x.nomeOrig && isFinite(x.lat) && isFinite(x.lon));
-  for (const b of brutos) {
-    if (IGNORAR.includes(norm(b.nomeOrig)) && !S.mun) { notas.push(`${b.nomeOrig}: não é município, ficou de fora`); continue; }
-    let tipo = 'cidade', nome = b.nomeOrig, ref = null;
-    for (const c of CORRECOES) if (c.em.test(nome)) tipo = c.tipo;
-    const fix = NOMES_PT[norm(nome)];
-    if (fix) { if (fix[0] !== nome) notas.push(`${nome} → ${fix[0]}`); nome = fix[0]; ref = fix[1]; if (fix[2]) tipo = fix[2]; }
-    for (const e of ESPECIAIS) if (norm(b.nomeOrig) === e.nome && distKm(b.lat, b.lon, e.lat, e.lon) < 1) { nome = e.vira[0]; tipo = e.vira[1]; ref = e.vira[2] || ref; notas.push(`${b.nomeOrig} (ponto da UNESCO) → ${nome}, patrimônio da UNESCO`); }
-    novos.push({ ...b, tipo, nome, ref });
-  }
-  // tira duplicados: mesmo tipo, nome parecido e perto (fica o nome mais completo; junta os rótulos)
-  const finais = [];
-  for (const n of novos) {
-    const a = norm(n.nome);
-    const dup = finais.find(f => f.tipo === n.tipo && distKm(f.lat, f.lon, n.lat, n.lon) < 15 && (norm(f.nome) === a || norm(f.nome).startsWith(a + ' ') || a.startsWith(norm(f.nome) + ' ')));
-    if (dup) {
-      // fica o nome mais completo; empate: o que tem acento
-      const acento = s => /[^\x00-\x7F]/.test(s);
-      const escolhido = n.nome.length > dup.nome.length ? n.nome : n.nome.length < dup.nome.length ? dup.nome : (acento(n.nome) && !acento(dup.nome) ? n.nome : dup.nome);
-      notas.push(`Duplicado juntado: ${dup.nome} + ${n.nome} → ${escolhido}`);
-      dup.nome = escolhido; dup.status = [...new Set([...dup.status, ...n.status])];
-      continue;
-    }
-    finais.push({ ...n });
-  }
-  // já existentes no app
-  const jaTem = [], inserir = [];
-  for (const f of finais) {
-    const ex = S.lugares.find(l => l.tipo === f.tipo && norm(l.nome) === norm(f.nome) && distKm(l.lat, l.lon, f.lat, f.lon) < 15);
-    (ex ? jaTem : inserir).push(f);
-  }
-  const validos = [];
-  for (const f of inserir) {
-    const loc = localizar(f.lat, f.lon, f.pais); f.paisCalc = loc.pais; f.estadoCalc = loc.estado;
-    f.rotulos = f.status.map(s => rotPorStatus[s]?.id).filter(Boolean);
-    // Brasil: cidade só se for município do IBGE
-    if (f.tipo === 'cidade' && loc.pais === 'BR' && S.mun) {
-      const m = municipioPorNome(f.nome, ufDe(loc.estado));
-      if (!m) { notas.push(`${f.nome}: não é município, ficou de fora`); continue; }
-      if (cidadeJaCadastrada(m)) { jaTem.push(f); continue; }
-      f.nome = m.nome; f.ref = refIbge(m);
-    }
-    validos.push(f);
-  }
-  return { inserir: validos, jaTem, notas, total: brutos.length };
-}
-function abreImportacao() {
-  abreModal(`
-    <h3>Importar do Places Been</h3>
-    <p>Escolha o arquivo CSV exportado pelo Places Been. Nada é salvo antes de você confirmar.</p>
-    <div class="campo"><label for="arq">Arquivo</label><input id="arq" type="file" accept=".csv,text/csv,text/plain"></div>
-    <div id="previa"></div>
-    <div class="acoes"><button class="btn" id="i-fechar">Cancelar</button><button class="btn principal" id="i-ok" disabled>Importar</button></div>`, (m, fechar) => {
-    let plano = null, linhas = null;
-    const prever = () => {
-      if (!linhas) return;
-      plano = preparaImportacao(linhas);
-      const porTipo = {}; plano.inserir.forEach(f => porTipo[f.tipo] = (porTipo[f.tipo] || 0) + 1);
-      const paises = new Set(plano.inserir.map(f => f.paisCalc).filter(Boolean)), estados = new Set(plano.inserir.map(f => f.estadoCalc).filter(Boolean));
-      m.querySelector('#previa').innerHTML = `<div class="resumo-import">
-        <b>${plano.inserir.length} lugares para importar</b>
-        <span>${Object.entries(porTipo).map(([t, n]) => `${n} ${n === 1 ? TIPOS[t].um.toLowerCase() : TIPOS[t].curto.toLowerCase()}`).join(' · ')}</span>
-        <span>${paises.size} ${paises.size === 1 ? 'país' : 'países'} e ${estados.size} estados</span>
-        ${plano.jaTem.length ? `<span>${plano.jaTem.length} já estão no app e serão ignorados</span>` : ''}
-        ${plano.notas.length ? `<details><summary>${plano.notas.length} ajustes automáticos</summary><ul>${plano.notas.map(n => `<li>${esc(n)}</li>`).join('')}</ul></details>` : ''}
-      </div>`;
-      m.querySelector('#i-ok').disabled = !plano.inserir.length;
-    };
-    m.querySelector('#i-fechar').onclick = fechar;
-    m.querySelector('#arq').onchange = async e => {
-      const f = e.target.files[0]; if (!f) return;
-      try { linhas = lerCSV(await f.text()); try { await carregaMunicipios(); } catch {} prever(); }
-      catch { m.querySelector('#previa').innerHTML = '<div class="resumo-import">Não consegui ler esse arquivo. Confira se é o CSV do Places Been.</div>'; }
-    };
-    m.querySelector('#i-ok').onclick = async ev => {
-      ev.target.disabled = true; ev.target.textContent = 'Importando…';
-      try {
-        const regs = plano.inserir.map(f => ({ tipo: f.tipo, nome: f.nome, lat: f.lat, lon: f.lon, pais: f.paisCalc, estado: f.estadoCalc, ref_externa: f.ref }));
-        const { data, error } = await supa.from('viagem_lugares').insert(regs).select();
-        if (error) throw error;
-        const lr = [];
-        data.forEach((d, i) => plano.inserir[i].rotulos.forEach(r => lr.push({ lugar_id: d.id, rotulo_id: r })));
-        if (lr.length) { const { error: e2 } = await supa.from('viagem_lugar_rotulos').insert(lr); if (e2) throw e2; }
-        await carregaDados(); atualizaTudo(); fechar();
-        toast(`${data.length} lugares importados`, 3500);
-        if (camadaPinos.getLayers().length) mapa.fitBounds(L.featureGroup(camadaPinos.getLayers()).getBounds().pad(0.1));
-      } catch (e) { toast('Erro na importação: ' + e.message, 5000); ev.target.disabled = false; ev.target.textContent = 'Importar'; }
     };
   });
 }
@@ -2463,7 +2348,7 @@ function abreViagens() {
     const vgs = [...(S.viagens || [])].sort((a, b) => inicioViagem(b).localeCompare(inicioViagem(a)));
     m.querySelector('#vg-corpo').innerHTML = `
       ${vgs.length ? vgs.map(vg => { const ps = paradasDe(vg.id); const paises = new Set(ps.map(p => porLugar.get(p.lugar_id)?.pais).filter(Boolean)); return `<button class="viagem-card" data-vg="${vg.id}"><b>${esc(vg.nome)}</b>${(() => { const vv = (S.voos || []).filter(v => v.viagem_id === vg.id); return vv.length ? `<small>✈ ${vv.length} ${vv.length === 1 ? 'voo' : 'voos'} · ${fmtKm(vv.reduce((t, v) => t + kmVoo(v), 0))} · ${fmtHoras(vv.reduce((t, v) => t + minVoo(v), 0))} no ar</small>` : ''; })()}<small>${esc(periodoViagem(vg))} · ${ps.length} ${ps.length === 1 ? 'parada' : 'paradas'} · ${fmtKm(kmViagem(vg.id))}${(() => { const t = [...kmPorTransporte([vg.id]).keys()].filter(k => TRANSPORTES[k]); return t.length ? ' ' + t.map(k => TRANSPORTES[k][0]).join('') : ''; })()} · ${[...paises].map(bandeira).join(' ')}</small></button>`; }).join('') : '<p>Nenhuma viagem ainda. Crie uma a partir das sugestões abaixo ou do zero.</p>'}
-      ${sug.length ? `<h4>Sugestões</h4><p class="meta">Meses com vários lugares visitados que ainda não estão numa viagem.</p>${sug.map(([ym, vs]) => `<div class="sugestao"><span><b>${esc(nomeMes(ym))}</b> · ${vs.length} lugares<small>${esc(vs.slice(0, 5).map(v => porLugar.get(v.lugar_id)?.nome).filter(Boolean).join(', '))}${vs.length > 5 ? '…' : ''}</small></span><button class="btn" data-sug="${ym}">Criar</button></div>`).join('')}` : ''}`;
+      ${sug.length ? `<h4>Sugestões</h4><p class="meta">Meses com vários lugares visitados que ainda não estão numa viagem.</p>${sug.map(([ym, vs]) => `<div class="sugestao"><span><b>${esc(nomeMes(ym))} · ${vs.length} lugares</b><small>${esc(vs.slice(0, 5).map(v => porLugar.get(v.lugar_id)?.nome).filter(Boolean).join(', '))}${vs.length > 5 ? '…' : ''}</small></span><button class="btn" data-sug="${ym}">Criar</button></div>`).join('')}` : ''}`;
     m.querySelectorAll('[data-vg]').forEach(b => b.onclick = () => editaViagem(S.viagens.find(x => x.id === b.dataset.vg), null, () => desenhar(m)));
     m.querySelectorAll('[data-sug]').forEach(b => b.onclick = () => editaViagem(null, b.dataset.sug, () => desenhar(m)));
   };
@@ -2818,7 +2703,7 @@ function abreEstatisticas() {
   const paisCasaSt = casa()?.pais || 'BR';
   const paisesStats = [...paisesVis].sort((a, b) => (b === paisCasaSt) - (a === paisCasaSt) || nomePais(a).localeCompare(nomePais(b), 'pt-BR'));
   const c0 = casa();
-  const longe = c0 ? visitados.filter(l => l.id !== c0.id).map(l => [l, distKm(c0.lat, c0.lon, l.lat, l.lon)]).sort((a, b) => b[1] - a[1])[0] : null;
+  const longe = c0 ? visitados.filter(l => l.tipo === 'cidade' && l.id !== c0.id).map(l => [l, distKm(c0.lat, c0.lon, l.lat, l.lon)]).sort((a, b) => b[1] - a[1])[0] : null;
   const opcoesCasa = (() => {
     const morei = S.rotulos.find(r => norm(r.nome) === 'morei');
     const cs = cidadesVis.slice().sort((a, b) => (morei && rotulosDe(b.id).has(morei.id)) - (morei && rotulosDe(a.id).has(morei.id)) || a.nome.localeCompare(b.nome, 'pt-BR'));
@@ -3037,6 +2922,8 @@ async function abreBandeiras(abaInicial = 'paises') {
   };
   // capitais brasileiras (bandeira municipal da Wikidata)
   const capVisitadas = new Set(S.lugares.filter(l => l.tipo === 'cidade' && l.ref_externa?.startsWith('ibge:') && visitado(l.id, vis)).map(l => l.ref_externa.slice(5)).filter(c => CAPITAIS.includes(c)));
+  // capitais: a lista é a do Brasil; quem mora fora só vê a aba se já passou por alguma
+  const temCapitais = paisCasa === 'BR' || capVisitadas.size > 0;
   const htmlCapitais = () => {
     const mun = S.munPorCod;
     const lista = CAPITAIS.filter(c => albumCompleto || capVisitadas.has(c))
@@ -3051,12 +2938,13 @@ async function abreBandeiras(abaInicial = 'paises') {
     <div class="abas-band" role="tablist">
       <button role="tab" data-aba-band="paises">Países <b>${paisesVis.size}</b></button>
       <button role="tab" data-aba-band="estados">Estados <b>${estadosVis.size}</b></button>
-      <button role="tab" data-aba-band="capitais">Capitais <b>${capVisitadas.size}</b></button>
+      ${temCapitais ? `<button role="tab" data-aba-band="capitais">Capitais <b>${capVisitadas.size}</b></button>` : ''}
       <button role="tab" data-aba-band="mapa">Mapa</button>
     </div>
     <div class="band-opcoes"></div>
     <div id="band-corpo"></div>
     <div class="acoes"><button class="btn" id="bd-fechar">Fechar</button></div>`, (m, fechar) => {
+    if (abaInicial === 'capitais' && !temCapitais) abaInicial = 'paises';
     let abaAtual = abaInicial, mapaModo = 'paises';
     const opcoes = m.querySelector('.band-opcoes');
     const mostra = aba => {

@@ -1,8 +1,8 @@
 // Por Onde Andei — service worker
 // Página e mapas: rede primeiro (pega atualização), cache se estiver offline.
 // Bibliotecas e fontes: cache primeiro. Mapa de fundo fica no cache normal do navegador.
-const VERSAO = 'poa-v90';
-const BASE = ['./', './index.html', './manifest.json', './paises.json', './estados.json', './municipios-br.json', './aeroportos.json', './ranking-aeroportos.json', './icon-192.png', './icon-512.png'];
+const VERSAO = 'poa-v91';
+const BASE = ['./', './index.html', './manifest.json', './paises.json', './estados.json', './municipios-br.json', './aeroportos.json', './ranking-aeroportos.json', './aerolinhas.json', './aeronaves.json', './cias-historico.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSAO).then(c => c.addAll(BASE)).then(() => self.skipWaiting()));
@@ -44,7 +44,8 @@ self.addEventListener('fetch', e => {
       fetch(req).then(res => {
         if (res.ok) { const copia = res.clone(); caches.open(VERSAO).then(c => c.put(req, copia)); }
         return res;
-      }).catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))
+      // sem internet: a cópia guardada; a página do app só para quem abre uma página (nunca no lugar de um arquivo de dados)
+      }).catch(() => caches.match(req).then(hit => hit || (req.mode === 'navigate' ? caches.match('./index.html') : new Response('', { status: 503, statusText: 'offline' }))))
     );
   }
 });
