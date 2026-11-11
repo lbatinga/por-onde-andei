@@ -2,7 +2,7 @@
 
 Mapa pessoal de viagens, em português. O núcleo é **países, estados, cidades e aeroportos**; patrimônios da UNESCO, atrações e parques e museus são extras. O foco é o que a pessoa já visitou ("Estive"); "Quero ir" é a lista de desejos. Tudo funciona para qualquer usuário, morando no Brasil ou fora.
 
-- PWA de um arquivo só (`index.html`) com service worker (`sw.js`, versão em `VERSAO`; subir a cada publicação. Dados e bibliotecas ficam em caches próprios, que não são apagados a cada versão).
+- PWA sem etapa de build: `index.html` (estrutura), `app.css` (visual) e `js/` (código, em scripts comuns carregados nesta ordem: base, bases, mapa, lista, rotulos-fotos, viagens, estatisticas, voos, inicio; todos compartilham o mesmo escopo global). Arquivo novo em `js/` precisa entrar no `index.html` e na lista `CASCA` do `sw.js`. Tudo com service worker (`sw.js`, versão em `V`; a cada publicação, subir `V` no `sw.js` e trocar todos os `?v=` do `index.html` para o mesmo número, senão o aparelho pode misturar arquivos de versões diferentes. Dados e bibliotecas ficam em caches próprios, que não são apagados a cada versão).
 - Dados no Supabase (tabelas `viagem_*`, cada linha com `user_id` e RLS "dono").
 - Hospedagem: Vercel, importando este repositório (publica sozinho a cada push na `main`). Não usar o GitHub Pages: em `lbatinga.github.io` o Chrome confunde com o CineList e não deixa instalar.
 

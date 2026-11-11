@@ -2,11 +2,13 @@
 // Página do app: rede primeiro (pega atualização), com limite de tempo; internet ruim ou offline cai na cópia guardada.
 // Arquivos de dados (mapas, listas): cópia guardada na hora, atualizando por trás para a próxima abertura.
 // Bibliotecas e fontes: cache primeiro. Mapa de fundo fica no cache normal do navegador.
-const VERSAO = 'poa-v94';          // muda a cada versão do app
+const V = '95';                    // muda a cada publicação, junto com os ?v= do index.html (mesmo número)
+const VERSAO = 'poa-v' + V;
 const DADOS = 'poa-dados-v1';      // dados pesados: sobrevivem às versões
 const LIBS = 'poa-libs-v1';        // bibliotecas e fontes: idem
 const ESPERA = 4000;               // ms de espera pela rede antes de usar a cópia da página
-const CASCA = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+const CASCA = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png',
+  ...['app.css', 'js/base.js', 'js/bases.js', 'js/mapa.js', 'js/lista.js', 'js/rotulos-fotos.js', 'js/viagens.js', 'js/estatisticas.js', 'js/voos.js', 'js/inicio.js'].map(a => `./${a}?v=${V}`)];
 const BASE_DADOS = ['./paises.json', './estados.json', './municipios-br.json', './aeroportos.json', './ranking-aeroportos.json', './aerolinhas.json', './aeronaves.json', './cias-historico.json'];
 
 self.addEventListener('install', e => {
