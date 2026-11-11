@@ -815,7 +815,7 @@ const nomeEstado = id => S.estadoPorId.get(id)?.nome || '';
 /* ================= Sem internet ================= */
 // Cópia local dos dados (para abrir sem conexão) e fila de alterações feitas offline,
 // enviada sozinha quando a internet volta. Ids de lugares novos são gerados no aparelho.
-const CHAVE_COPIA = 'poa-copia-v1', CHAVE_FILA = 'poa-fila-v1';
+const CHAVE_COPIA = 'poa-copia-v1', CHAVE_FILA = 'poa-fila-v1', CHAVE_FALHAS = 'poa-falhas-v1';
 const novoId = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
 function salvaCopia() {
   if (S.publico || !S.user) return;
@@ -831,7 +831,14 @@ function aplicaCopia(c) {
   S.lr = new Map((c.lr || []).map(([l, rs]) => [l, new Map(rs.map(r => [r, null]))]));
 }
 let fila = (() => { try { return JSON.parse(localStorage.getItem(CHAVE_FILA)) || []; } catch { return []; } })();
-function salvaFila() { try { localStorage.setItem(CHAVE_FILA, JSON.stringify(fila)); } catch {} atualizaSinal(); }
+// alterações que o servidor recusou: ficam guardadas para tentar de novo, nunca somem sozinhas
+let falhas = (() => { try { return JSON.parse(localStorage.getItem(CHAVE_FALHAS)) || []; } catch { return []; } })();
+function salvaFila() {
+  try { localStorage.setItem(CHAVE_FILA, JSON.stringify(fila)); localStorage.setItem(CHAVE_FALHAS, JSON.stringify(falhas)); }
+  catch { toast('Sem espaço no aparelho para guardar as alterações feitas sem internet', 5000); }
+  atualizaSinal();
+}
+const erroDeSessao = e => !!e && (e.code === 'PGRST301' || e.status === 401 || /jwt|token is expired|not authenticated/i.test(e.message || ''));
 const erroDeRede = e => !e || /fetch|network|load failed|rede|timeout/i.test(e.message || String(e));
 function executa(op) {
   const q = supa.from(op.tabela);
@@ -856,19 +863,44 @@ async function sincroniza() {
     let enviados = 0;
     while (fila.length) {
       let res; try { res = await executa(fila[0]); } catch (e) { res = { error: e }; }
-      if (res?.error && erroDeRede(res.error)) break;
-      // 23505 = já existia; outro erro descarta a alteração para a fila não travar
-      if (res?.error && res.error.code !== '23505') toast('Uma alteração feita sem internet não pôde ser salva: ' + res.error.message, 5000);
-      fila.shift(); salvaFila(); enviados++;
+      // sem rede ou sessão vencida: para e tenta de novo depois, sem perder nada
+      if (res?.error && (erroDeRede(res.error) || erroDeSessao(res.error))) break;
+      // 23505 = já existia; outro erro sai da fila (para não travar as seguintes) e fica guardado em "não salvas"
+      const op = fila.shift();
+      if (res?.error && res.error.code !== '23505') falhas.push({ ...op, erro: res.error.message || String(res.error) });
+      else enviados++;
+      salvaFila();
     }
-    if (!fila.length && enviados) toast(enviados === 1 ? 'A alteração feita sem internet foi salva' : `${enviados} alterações feitas sem internet foram salvas`);
+    if (falhas.length) toast(`${falhas.length} ${falhas.length === 1 ? 'alteração não pôde ser salva' : 'alterações não puderam ser salvas'}. Toque no aviso no topo para ver.`, 6000);
+    else if (!fila.length && enviados) toast(enviados === 1 ? 'A alteração feita sem internet foi salva' : `${enviados} alterações feitas sem internet foram salvas`);
   } finally { sincronizando = false; atualizaSinal(); }
 }
 function atualizaSinal() {
   const el = document.getElementById('sinal'); if (!el) return;
   const off = !navigator.onLine;
-  el.hidden = !off && !fila.length;
-  el.textContent = off ? (fila.length ? `Sem internet · ${fila.length} pendente${fila.length > 1 ? 's' : ''}` : 'Sem internet') : `Enviando ${fila.length}…`;
+  el.hidden = !off && !fila.length && !falhas.length;
+  el.textContent = off ? (fila.length ? `Sem internet · ${fila.length} pendente${fila.length > 1 ? 's' : ''}` : 'Sem internet')
+    : fila.length ? `Enviando ${fila.length}…` : `${falhas.length} não salva${falhas.length > 1 ? 's' : ''}`;
+  el.style.cursor = falhas.length ? 'pointer' : '';
+  el.onclick = falhas.length ? abreFalhas : null;
+}
+function abreFalhas() {
+  const nomes = { inserir: 'Incluir', atualizar: 'Alterar', apagar: 'Apagar' };
+  abreModal(`
+    <h3>Alterações não salvas</h3>
+    <p>Estas alterações foram feitas sem internet e o servidor recusou. Elas continuam guardadas neste aparelho.</p>
+    <div class="menu-lista">${falhas.map(f => `<div style="padding:8px 0"><b>${esc(nomes[f.tipo] || f.tipo)}</b> ${esc(f.linha?.nome || f.valores?.nome || String(f.tabela || '').replace('viagem_', ''))}<br><small>${esc(f.erro || '')}</small></div>`).join('')}</div>
+    <div class="acoes"><button class="btn principal" id="fa-tentar">Tentar de novo</button><button class="btn" id="fa-descartar">Descartar</button></div>
+  `, (m, fechar) => {
+    m.querySelector('#fa-tentar').onclick = () => {
+      fila = falhas.map(({ erro, ...op }) => op).concat(fila); falhas = []; salvaFila(); fechar();
+      if (navigator.onLine) sincroniza(); else toast('Sem internet: tento de novo quando voltar');
+    };
+    m.querySelector('#fa-descartar').onclick = () => {
+      if (!confirm('Descartar de vez estas alterações? Não dá para desfazer.')) return;
+      falhas = []; salvaFila(); fechar();
+    };
+  });
 }
 window.addEventListener('online', () => { atualizaSinal(); sincroniza(); });
 window.addEventListener('offline', atualizaSinal);
@@ -3835,10 +3867,10 @@ function abreMenu() {
     m.querySelector('#m-band') && (m.querySelector('#m-band').onclick = () => { fechar(); abreBandeiras(); });
     m.querySelector('#m-comp').onclick = () => { fechar(); abreCompartilhar(); };
     m.querySelector('#m-backup').onclick = () => { fechar(); abreBackup(); };
-    m.querySelector('#m-sair').onclick = async () => { if (fila.length && !confirmaSaida()) return; try { localStorage.removeItem(CHAVE_COPIA); localStorage.removeItem(CHAVE_FILA); } catch {} await supa.auth.signOut(); location.reload(); };
+    m.querySelector('#m-sair').onclick = async () => { if ((fila.length || falhas.length) && !confirmaSaida()) return; try { localStorage.removeItem(CHAVE_COPIA); localStorage.removeItem(CHAVE_FILA); localStorage.removeItem(CHAVE_FALHAS); } catch {} await supa.auth.signOut(); location.reload(); };
   });
 }
-function confirmaSaida() { toast(`Há ${fila.length} alteração(ões) sem internet ainda não enviadas. Conecte-se antes de sair.`, 5000); return false; }
+function confirmaSaida() { toast(fila.length ? `Há ${fila.length} alteração(ões) sem internet ainda não enviadas. Conecte-se antes de sair.` : `Há ${falhas.length} alteração(ões) não salvas. Toque no aviso no topo para resolver antes de sair.`, 5000); return false; }
 function saiMira() { S.modoMira = false; $('#aviso-mira').hidden = true; document.body.classList.remove('mira'); }
 
 /* ================= Login ================= */
